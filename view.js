@@ -79,6 +79,18 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       }, this);
     }
   },
+  
+  
+  /**
+   * This is a convenience method for applying properties to a newly created View immediately after instantiation.
+   * 
+   * Example:
+   *   var v = (new cmvc.ui.View(...)).extend({id: "view12", parent: thatContainer});
+   */
+  extend: function(properties) {
+    goog.object.extend(this, properties);
+    return this;
+  },
 
 
   /**
@@ -92,6 +104,10 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     goog.ui.Component.EventType.CLOSE:        'this.handleCloseItem'
   },
   
+
+  /*********************************************************************************************/
+  /******View Properties (combination of goog.ui.Container and goog.ui.Control properties)******/
+
 
   /**
    * Allows an alternative element to be set to recieve key events, otherwise
@@ -264,19 +280,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   statesWithTransitionEvents_: 0x00,
 
 
-  /**
-   * This is a convenience method for applying properties to a newly created View immediately after instantiation.
-   * 
-   * Example:
-   *   var v = (new cmvc.ui.View(...)).extend({id: "view12", parent: thatContainer});
-   */
-  extend: function(properties) {
-    goog.object.extend(this, properties);
-    return this;
-  },
-
-
-  // Event handler and renderer management.
+  /*********************************************************************************************/
+  /************************ Event handler and renderer management. *****************************/
 
 
   /**
@@ -387,7 +392,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   },
 
 
-  // Standard cmvc.ui.View implementation.
+  /*********************************************************************************************/
+  /************************* Standard cmvc.ui.View implementation. *****************************/
 
 
   /**
@@ -408,9 +414,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     
     // render the root element
     cmvc.ui.View.superClass_.render_.apply(this, arguments);
-    
-    // render any unrendered child views before continuing enterDocument()
-    this.renderChildren();
     
     this.postRender();
   },
@@ -440,8 +443,27 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * Creates the container's DOM.  Overrides {@link goog.ui.Component#createDom}.
    */
   createDom: function() {
+    var element = this.renderer_.createDom(this);
+    
     // Delegate to renderer.
-    this.setElementInternal(this.renderer_.createDom(this));
+    this.setElementInternal(element);
+    
+    // Initialize ARIA role.
+    this.renderer_.setAriaRole(element);
+
+    // Initialize text selection.
+    if (!this.isAllowTextSelection()) {
+      // The renderer is assumed to create selectable elements.  Since making
+      // elements unselectable is expensive, only do it if needed (bug 1037090).
+      this.renderer_.setAllowTextSelection(element, false);
+    }
+
+    // Initialize visibility.
+    if (!this.isVisible()) {
+      // The renderer is assumed to create visible elements. Since hiding
+      // elements can be expensive, only do it if needed (bug 1037105).
+      this.renderer_.setVisible(element, false);
+    }
   },
 
 
@@ -470,17 +492,31 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Decorates the given element with this container. Overrides {@link
-   * goog.ui.Component#decorateInternal}.  Considered protected.
+   * Decorates the given element with this component. Overrides {@link
+   * goog.ui.Component#decorateInternal} by delegating DOM manipulation
+   * to the control's renderer.
    * @param {Element} element Element to decorate.
+   * @protected
+   * @override
    */
   decorateInternal: function(element) {
+    element = this.renderer_.decorate(this, element);
+
     // Delegate to renderer.
-    this.setElementInternal(this.renderer_.decorate(this, element));
-    // Check whether the decorated element is explicitly styled to be invisible.
-    if (element.style.display == 'none') {
-      this.visible_ = false;
+    this.setElementInternal(element);
+
+    // Initialize ARIA role.
+    this.renderer_.setAriaRole(element);
+
+    // Initialize text selection.
+    if (!this.isAllowTextSelection()) {
+      // Decorated elements are assumed to be selectable.  Since making elements
+      // unselectable is expensive, only do it if needed (bug 1037090).
+      this.renderer_.setAllowTextSelection(element, false);
     }
+
+    // Initialize visibility based on the decorated element's styling.
+    this.visible_ = element.style.display != 'none';
   },
 
 
@@ -489,6 +525,10 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * handling.  Overrides {@link goog.ui.Component#enterDocument}.
    */
   enterDocument: function() {
+    // render any unrendered child views before continuing enterDocument(), because we want them
+    // to be in the document before continuing
+    this.renderChildren();
+    
     /**
      * Calling the superclass enterDocument (goog.ui.Component#enterDocument) does the following, in order:
      * 1. Sets inDocument_ to true
@@ -693,7 +733,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   },
 
 
-  // Default event handlers.
+  /*********************************************************************************************/
+  /*********************************** Default event handlers. *********************************/
 
 
   /**
@@ -1008,7 +1049,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   },
 
 
-  // Child component management.
+  /*********************************************************************************************/
+  /************************************ Child component management. ****************************/
 
 
   /**
@@ -1122,7 +1164,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   },
 
 
-  // Container state management.
+  /*********************************************************************************************/
+  /************************************** View state management. *******************************/
 
 
   /**
@@ -1327,7 +1370,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   },
 
 
-  // Highlight management.
+  /*********************************************************************************************/
+  /*********************************** Highlight management. ***********************************/
 
 
   /**
@@ -1490,319 +1534,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   setMouseButtonPressed: function(pressed) {
     this.mouseButtonPressed_ = pressed;
   }
-});
-
-
-
-
-
-
-
-
-
-goog.provide("cmvc.ui");
-goog.provide("cmvc.ui.View");
-
-goog.require("goog.events");
-goog.require("goog.array");
-goog.require("goog.object");
-goog.require("goog.ui.Component");
-goog.require("goog.ui.Container");
-goog.require("cmvc");
-goog.require("cmvc.string");
-goog.require("cmvc.Template");
-goog.require("cmvc.ui.ViewRenderer");
-
-/**
- * cmvc.ui.View is a container type that can be used to design a user interface (view hierarchy) in a declarative way.
- * View objects may contain child View objects, which may in turn hold their own child View objects.
- * The View class acts as a hybrid goog.ui.Container and goog.ui.Control class.
- * Since cmvc.ui.View extends goog.ui.Container, child objects may be of the following types:
- *   1. goog.ui.Component
- *   2. goog.ui.Container
- *   3. goog.ui.Control
- *   4. cmvc.ui.View
- * cmvc.ui.View is modeled after both the goog.ui.Container and Sproutcore SC.View "classes". The main thing taken
- * from SC.View was the declarative way that a view hierarchy could be designed, and then instantiated and rendered later
- * at another time.
- */
-cmvc.ui.View = cmvc.extend(goog.ui.Container, {
-  constructor: function(opt_orientation, opt_renderer, opt_domHelper) {
-    opt_renderer = opt_renderer || cmvc.ui.ViewRenderer.getInstance();
-    
-    cmvc.ui.View.superClass_.constructor.call(this, opt_orientation, opt_renderer, opt_domHelper);
-    
-    /*
-    // prepare the tag and attributes for createDom
-    this.elementTag = this.root['tag'] || 'div';
-    this.elementAttributes = goog.object.clone(this.root);
-    delete this.elementAttributes['tag'];
-    //*/
-    
-    // enumerate the child views declared in this.children and add each as a child view of this view (the parent/root)
-    if(this.children) {
-      goog.array.forEach(cmvc.string.words(this.children), function(e, i, a) {
-        // add child views (view objects) but do not render them yet because if we render the child view now, we
-        //   are forced to create the DOM node for this view (the parent of the children) before we're ready.
-        //   We only want to create the DOM node for this view when we call render().
-        this.addChild(new (this[e])(opt_domHelper), false);
-      }, this);
-    }
-  },
-  
-  /**
-   * This is a convenience method for applying properties to a newly created View immediately after instantiation.
-   * 
-   * Example:
-   *   var v = (new cmvc.ui.View(...)).extend({id: "view12", parent: thatContainer});
-   */
-  extend: function(properties) {
-    goog.object.extend(this, properties);
-    return this;
-  },
-  
-  /*
-  // This function retrieves a goog.ui.Component object from the view hierarchy, starting with 'this' as the root.
-  // idea taken from SproutCore's View#getPath
-  getView: function(view_path) {
-    var retval = this;      // return this if the view_path is the empty string
-    view_path = view_path.trim();
-    if(view_path.length > 0) {
-      var root = view_path.split('.', 1)[0];      // get the string before the first period: "a.b.c" -> "a"
-      
-      // find the child view in the hierarchy of views
-      if(this.named_children[root]) {
-        // recursively dig down and find the correct child view
-        retval = this.named_children[root].getNamedView(view_path.substr(root.length + 1));
-      } else {
-        // if the specified child view doesn't exist in the named_children hash, or there are no child_views, return null
-        retval = null;
-      }
-    }
-    return retval;
-  },
-  */
-  
-  /**
-   * Renders the component.  If a parent element is supplied, it should already be
-   * in the document and then the component's element will be appended to it.  If
-   * there is no optional parent element and the element doesn't have a parentNode
-   * then it will be appended to the document body.
-   *
-   * Throws an Error if the component is already rendered.
-   *
-   * @param {Element} opt_parentElement Optional parent element to render the
-   *    component into.
-   *
-   * Overrides the default implementation of render, defined at goog.ui.Component.prototype.render
-   */
-  render: function(opt_parentElement) {
-    this.preRender();
-    
-    // render the root element
-    cmvc.ui.View.superClass_.render.apply(this, arguments);
-    
-    this.postRender();
-  },
-  
-  // placeholder preRender function
-  preRender: function() {},
-  
-  // placeholder postRender function
-  postRender: function() {},
-  
-  renderChildren: function() {
-    // render any child views that haven't been rendered yet
-    this.forEachChild(function(child, i) {
-      if(!child.isInDocument()) {
-        child.render(this.getElement());
-      }
-    }, this);
-  },
-  
-  /**
-   * Configures the container after its DOM has been rendered, sets up event handling,
-   * and renders any unrendered child views.
-   * 
-   * Called when the component's element is known to be in the document. Anything
-   * using document.getElementById etc. should be done at this stage.
-   * 
-   * If the component contains child components, this call is propagated to its
-   * children.
-   * 
-   * Overrides {@link goog.ui.Container#enterDocument}.
-   */
-  enterDocument: function() {
-    // render any unrendered child views before calling enterDocument()
-    this.renderChildren();
-    
-    /**
-     * Calling the superclass enterDocument (goog.ui.Container#enterDocument) does the following, in order:
-     * (in goog.ui.Component#enterDocument)
-     * 1. Sets inDocument_ to true
-     * 2. Propagate enterDocument to child components that have a DOM (i.e. rendered child components), if any.
-     * (in goog.ui.Container#enterDocument)
-     * 3. Registers each rendered child component's child ID
-     * 4. Call the renderer's initializeDom method to initialize the container's DOM.
-     * 5. Initialize visibility (opt_force = true, so we don't dispatch events).
-     * 6. Set up event handlers to handle events dispatched by child views/controls.
-     * 7. If the container is focusable, set up keyboard event handling.
-     */
-    cmvc.ui.View.superClass_.enterDocument.apply(this, arguments);
-    
-    // even though we could attach the view's event handlers to the view in the constructor, we don't want to
-    //   handle events unless the element_ is rendered.
-    this.attachDeclaredViewEventHandlers();
-    
-    // we only want to attach the DOM event handlers after the element_ is rendered
-    this.attachDeclaredDomEventHandlers();
-  },
-  
-  /**
-   * Cleans up the container before its DOM is removed from the document, and removes event handlers.
-   * 
-   * Called by dispose to clean up the elements and listeners created by a
-   * component, or by a parent component/application who has removed the
-   * component from the document but wants to reuse it later.
-   *
-   * If the component contains child components, this call is propagated to its
-   * children.
-   *
-   * It should be possible for the component to be rendered again once this method
-   * has been called.
-   * 
-   * Overrides {@link goog.ui.Container#exitDocument}.
-   */
-  exitDocument: function() {
-    // removal of event handlers should be automatically done in goog.ui.Component#exitDocument
-    cmvc.ui.View.superClass_.exitDocument.apply(this, arguments);
-  },
-  
-  /**
-   * Iterate over all pairs of event/function_reference pairs in the event_handlers object, attaching
-   * each function_reference as an event listener for the corresponding event.
-   */
-  attachDeclaredViewEventHandlers: function() {
-    var fn = null;
-    
-    // create the initial event handlers
-    if(this.viewEvents) {
-      for(var e in this.viewEvents) {                   // e is the event name (e.g. 'click')
-        var event_handler_ref = this.viewEvents[e];     // event_handler_ref is a path to an event handler function
-        var i = event_handler_ref.lastIndexOf('.');
-        if(i >= 0) {
-          var that = eval(event_handler_ref.substring(0, i));
-          //var that_event_handler_fn_name = event_handler_ref.substring(i+1, event_handler_ref.length);
-          
-          fn = eval(event_handler_ref);
-          
-          //goog.events.listen(this, e, fn, false, that);
-          // I'd rather use this object's EventHandler object, like below, instead of the global listen "registry"
-          //   because all I have to do to stop listening to the events is to dispose of the EventHandler object.
-          this.getHandler().listen(this, e, fn, false, that);
-        }
-      }
-    }
-  },
-  
-  /**
-   * Iterate over the events referenced in the domEvents array and for each event attach an event handler to the
-   * root element that will simply fire the same event on the View object.
-   */
-  attachDeclaredDomEventHandlers: function() {
-    var elem = this.getElement();
-    
-    if(elem) {
-      // create the initial event handlers
-      if(this.domEvents) {
-        goog.array.forEach(this.domEvents, function(e, i, a) {    // e is the event name (e.g. 'click')
-          this.getHandler().listen(elem, e, function(evt){ goog.events.dispatchEvent(this, evt); }, false, this);
-        }, this);
-      }
-    }
-  },
-  
-  /**
-   * Adds the control as a child of this container at the given 0-based index.
-   * Overrides {@link goog.ui.Component#addChildAt} by also updating the
-   * container's highlight index.  Since {@link goog.ui.Component#addChild} uses
-   * {@link #addChildAt} internally, we only need to override this method.
-   * @param {goog.ui.Component} control New child.
-   * @param {number} index Index at which the new child is to be added.
-   * @param {boolean} opt_render Whether the new child should be rendered
-   *     immediately after being added (defaults to false).
-   */
-  addChildAt: function(control, index, opt_render) {
-    /*
-    // Make sure the child control dispatches HIGHLIGHT, UNHIGHLIGHT, OPEN, and
-    // CLOSE events, and that it doesn't steal keyboard focus.
-    control.setDispatchTransitionEvents(goog.ui.Component.State.HOVER, true);
-    control.setDispatchTransitionEvents(goog.ui.Component.State.OPENED, true);
-    if (this.isFocusable() || !this.isFocusableChildrenAllowed()) {
-      control.setSupportedState(goog.ui.Component.State.FOCUSED, false);
-    }
-
-    // Disable mouse event handling by child controls.
-    control.setHandleMouseEvents(false);
-    */
-
-    // Let the superclass implementation do the work.
-    goog.ui.Component.prototype.addChildAt.call(this, control, index, opt_render);
-
-    if (opt_render && this.isInDocument()) {
-      this.registerChildId_(control);
-    }
-
-    // Update the highlight index, if needed.
-    if (index <= this.highlightedIndex_) {
-      this.highlightedIndex_++;
-    }
-  },
-
-  /**
-   * Removes a child control.  Overrides {@link goog.ui.Component#removeChild} by
-   * updating the highlight index.  Since {@link goog.ui.Component#removeChildAt}
-   * uses {@link #removeChild} internally, we only need to override this method.
-   * @param {string|goog.ui.Component} control The ID of the child to remove, or
-   *     the Component itself.
-   * @param {boolean} opt_unrender Whether to call {@code exitDocument} on the
-   *     removed control, and detach its DOM from the document (defaults to
-   *     false).
-   * @return {goog.ui.Component} The removed control, if any.
-   */
-  removeChild: function(control, opt_unrender) {
-    // TODO: Fix implementation so that it works if control is a string.
-    
-    var index = this.indexOfChild(/** @type {goog.ui.Component} */ (control));
-    if (index != -1) {
-      if (index == this.highlightedIndex_) {
-        control.setHighlighted(false);
-      } else if (index < this.highlightedIndex_) {
-        this.highlightedIndex_--;
-      }
-    }
-    
-    // Remove the mapping from the child element ID map.
-    var childElem = control.getElement();
-    if (childElem && childElem.id) {
-      goog.object.remove(this.childElementIdMap_, childElem.id);
-    }
-    
-    control = /** @type {goog.ui.Component} */ (
-        goog.ui.Component.prototype.removeChild.call(this, control, opt_unrender));
-    
-    /*
-    // Re-enable mouse event handling (in case the control is reused elsewhere).
-    control.setHandleMouseEvents(true);
-    */
-    
-    return control;
-  },
-  
-  handleMouseDown: function(e) {},
-  handleMouseUp: function(e) {},
-  handleMouseOver: function(e) {},
-  handleMouseOut: function(e) {}
 });
 
 // Define two constants on the View "class"
