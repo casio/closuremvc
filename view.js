@@ -532,7 +532,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     /**
      * Calling the superclass enterDocument (goog.ui.Component#enterDocument) does the following, in order:
      * 1. Sets inDocument_ to true
-     * 2. Propagate enterDocument to child components that have a DOM (i.e. rendered child components), if any.
+     * 2. Propagate enterDocument to rendered child components (i.e. child components that have a DOM element), if any.
      */
     cmvc.ui.View.superClass_.enterDocument.call(this);
 
@@ -547,25 +547,28 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     
     // Initialize visibility (opt_force = true, so we don't dispatch events).
     this.setVisible(this.visible_, true);
-    
-    // If the container is focusable, set up keyboard event handling.
-    if (this.isFocusable()) {
-      this.enableFocusHandling_(true);
+
+    // Initialize event handling if at least one state other than DISABLED is supported.
+    if (this.supportedStates_ & ~goog.ui.Component.State.DISABLED) {
+      // If the container is focusable, set up keyboard event handling.
+      if (this.isFocusable()) {
+        this.enableFocusHandling_(true);
+      }
+
+      // Initialize mouse event handling if the control is configured to handle
+      // its own mouse events.  (Controls hosted in containers don't need to
+      // handle their own mouse events.)
+      if (this.isHandleMouseEvents()) {
+        this.enableMouseEventHandling_(true);
+      }
+      
+      // even though we could attach the view's event handlers to the view in the constructor, we don't want to
+      //   handle events unless the element_ is rendered.
+      this.attachDeclaredViewEventHandlers();
+
+      // we only want to attach the DOM event handlers after the element_ is rendered
+      this.attachDeclaredDomEventHandlers();
     }
-    
-    // Initialize mouse event handling if the control is configured to handle
-    // its own mouse events.  (Controls hosted in containers don't need to
-    // handle their own mouse events.)
-    if (this.isHandleMouseEvents()) {
-      this.enableMouseEventHandling_(true);
-    }
-    
-    // even though we could attach the view's event handlers to the view in the constructor, we don't want to
-    //   handle events unless the element_ is rendered.
-    this.attachDeclaredViewEventHandlers();
-    
-    // we only want to attach the DOM event handlers after the element_ is rendered
-    this.attachDeclaredDomEventHandlers();
   },
   
   
@@ -706,15 +709,20 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
     this.mouseButtonPressed_ = false;
     
+    /**
+     * goog.ui.Component#exitDocument does the following, in order:
+     * 1. Propagate exitDocument to child components that have been rendered, if any.
+     * 2. Removes all event handlers from the goog.events.EventHandler object returned by this.getHandler().
+     */
+    cmvc.ui.View.superClass_.exitDocument.call(this);
+    
     if (this.keyHandler_) {
       this.keyHandler_.detach();
     }
     
     if (this.isVisible() && this.isEnabled()) {
-      this.renderer_.setFocusable(this, false);
+      this.setFocusable(false);
     }
-
-    cmvc.ui.View.superClass_.exitDocument.call(this);
   },
 
 
