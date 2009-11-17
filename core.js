@@ -19,17 +19,6 @@ goog.require("goog.object");
  *    g.sayHi();    // alert box appears with the text "Hello!"
  */
 cmvc.extend = function(parentConstructor, prototypeMembers) {
-// cmvc.extend = function(parentConstructor /*, instanceMembers, prototypeMembers */) {
-//   var instanceMembers, prototypeMembers;
-//   
-//   if(arguments.length == 2) {
-//     instanceMembers = {};
-//     prototypeMembers = arguments[1];
-//   } else if(arguments.length == 3) {
-//     instanceMembers = arguments[1];
-//     prototypeMembers = arguments[2];
-//   }
-  
   // Note: the prototypeMembers object (an Object literal), by default has a constructor property that is set 
   //   to Object (because an object literal is an instance of Object, and therefore has whatever properties are held
   //   in Object.prototype, one of which is Object.prototype.constructor === Object)
