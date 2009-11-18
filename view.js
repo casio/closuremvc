@@ -13,12 +13,10 @@
 // Copyright 2007 Google Inc. All Rights Reserved.
 
 /**
- * @fileoverview 
- *
+ * @fileoverview cmvc.ui.View implements a hybrid goog.ui.Container and goog.ui.Control.
  */
 
-goog.provide('goog.ui.Container');
-goog.provide('goog.ui.Container.Orientation');
+goog.provide('cmvc.ui.View');
 
 goog.require('goog.dom');
 goog.require('goog.dom.a11y');
@@ -215,11 +213,12 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Whether the view should listen for and handle mouse events; defaults to true.
+   * Whether the view should listen for and handle its own mouse events; defaults to true.
+   * When this is set to false, the event simply bubbles up to the parent View.
    * @type {boolean}
    * @private
    */
-  handleMouseEvents_ = true,
+  handleOwnMouseEvents_ = true,
 
 
   /**
@@ -346,8 +345,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * protected; should only be used within this package and by subclasses.
    * @return {boolean} Whether the control handles its own mouse events.
    */
-  isHandleMouseEvents: function() {
-    return this.handleMouseEvents_;
+  isHandleOwnMouseEvents: function() {
+    return this.handleOwnMouseEvents_;
   },
 
 
@@ -359,11 +358,11 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {boolean} enable Whether to enable or disable mouse event handling.
    */
   setHandleMouseEvents: function(enable) {
-    if (this.isInDocument() && enable != this.handleMouseEvents_) {
+    if (this.isInDocument() && enable != this.handleOwnMouseEvents_) {
       // Already in the document; need to update event handler.
       this.enableMouseEventHandling_(enable);
     }
-    this.handleMouseEvents_ = enable;
+    this.handleOwnMouseEvents_ = enable;
   },
   
 
@@ -555,10 +554,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         this.enableFocusHandling_(true);
       }
 
-      // Initialize mouse event handling if the control is configured to handle
-      // its own mouse events.  (Controls hosted in containers don't need to
-      // handle their own mouse events.)
-      if (this.isHandleMouseEvents()) {
+      // Initialize mouse event handling if the view is configured to handle
+      // its own mouse events.
+      if (this.isHandleOwnMouseEvents()) {
         this.enableMouseEventHandling_(true);
       }
       
@@ -601,18 +599,16 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
           }
           break;
         case "number";      // the event handler is a reference to a specific built-in behavior
-          // TODO: Finish this case. Add the named constants to the View "class" object.
           switch(handler) {
-            case cmvc.ui.View.EventHandlers.Parent:
+            case cmvc.ui.View.EventHandlers.Self:
               context = this;
-              break;
-            case cmvc.ui.View.EventHandlers.Child:
-              // context = somehow get the child view object that the event target references.
+            case cmvc.ui.View.EventHandlers.Parent:
+              context = this.getParent();
               break;
             default:
               throw Error("Unable to attach event handler to the view. Unknown event handler reference.");
           }
-          fn = context.handleEvent;
+          fn = context.handleEvent;     // the context object ought to have a handleEvent() method
           break;
         default:
           throw Error("Unable to attach event handler to the view. Unknown event handler type.");
@@ -678,7 +674,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       handler.listen(element, goog.events.EventType.MOUSEOVER, this.handleMouseOver).
               listen(element, goog.events.EventType.MOUSEDOWN, this.handleMouseDown).
               listen(element, goog.events.EventType.MOUSEUP, this.handleMouseUp).
-              listen(element, goog.events.EventType.MOUSEOUT, this.handleMouseOut);
+              listen(element, goog.events.EventType.MOUSEOUT, this.handleMouseOut).
+              listen(goog.dom.getOwnerDocument(element), goog.events.EventType.MOUSEUP, this.handleDocumentMouseUp);
       if (goog.userAgent.IE) {
         handler.listen(element, goog.events.EventType.DBLCLICK, this.handleDblClick);
       }
@@ -686,7 +683,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       handler.unlisten(element, goog.events.EventType.MOUSEOVER, this.handleMouseOver).
               unlisten(element, goog.events.EventType.MOUSEDOWN, this.handleMouseDown).
               unlisten(element, goog.events.EventType.MOUSEUP, this.handleMouseUp).
-              unlisten(element, goog.events.EventType.MOUSEOUT, this.handleMouseOut);
+              unlisten(element, goog.events.EventType.MOUSEOUT, this.handleMouseOut).
+              unlisten(goog.dom.getOwnerDocument(element), goog.events.EventType.MOUSEUP, this.handleDocumentMouseUp);
       if (goog.userAgent.IE) {
         handler.unlisten(element, goog.events.EventType.DBLCLICK, this.handleDblClick);
       }
@@ -762,7 +760,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {goog.events.Event} e Highlight event to handle.
    */
   handleHighlightItem: function(e) {
-    var index = this.indexOfChild(/** @type {goog.ui.Component} */ (e.target));
+    var index = this.indexOfChild(/** @type {cmvc.ui.View | goog.ui.Control} */ (e.target));
     if (index > -1 && index != this.highlightedIndex_) {
       var item = this.getHighlighted();
       if (item) {
@@ -790,32 +788,28 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         }
       }
     }
-    goog.dom.a11y.setState(this.getElement(),
-        goog.dom.a11y.State.ACTIVEDESCENDANT, e.target.getElement().id);
+    goog.dom.a11y.setState(this.getElement(), goog.dom.a11y.State.ACTIVEDESCENDANT, e.target.getElement().id);
   },
 
 
   /**
-   * Handles UNHIGHLIGHT events dispatched by items in the container when
-   * they are unhighlighted.
+   * Handles UNHIGHLIGHT events dispatched by items in the container when they are unhighlighted.
    * @param {goog.events.Event} e Unhighlight event to handle.
    */
   handleUnHighlightItem: function(e) {
     if (e.target == this.getHighlighted()) {
       this.highlightedIndex_ = -1;
     }
-    goog.dom.a11y.setState(this.getElement(),
-         goog.dom.a11y.State.ACTIVEDESCENDANT, '');
+    goog.dom.a11y.setState(this.getElement(), goog.dom.a11y.State.ACTIVEDESCENDANT, '');
   },
 
 
   /**
-   * Handles OPEN events dispatched by items in the container when they are
-   * opened.
+   * Handles OPEN events dispatched by items in the container when they are opened.
    * @param {goog.events.Event} e Open event to handle.
    */
   handleOpenItem: function(e) {
-    var item = /** @type {goog.ui.Control} */ (e.target);
+    var item = /** @type {cmvc.ui.View | goog.ui.Control} */ (e.target);
     if (item && item != this.openItem_ && item.getParent() == this) {
       if (this.openItem_) {
         this.openItem_.setOpen(false);
@@ -826,8 +820,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Handles CLOSE events dispatched by items in the container when they are
-   * closed.
+   * Handles CLOSE events dispatched by items in the container when they are closed.
    * @param {goog.events.Event} e Close event to handle.
    */
   handleCloseItem: function(e) {
@@ -836,7 +829,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     }
   },
 
-
+  
   /**
    * Handles mousedown events over the container.  The default implementation
    * sets the "mouse button pressed" flag and, if the container is focusable,
@@ -844,10 +837,35 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {goog.events.BrowserEvent} e Mousedown event to handle.
    */
   handleMouseDown: function(e) {
-    if (this.enabled_) {
+    if (this.isEnabled()) {
       this.setMouseButtonPressed(true);
+      
+      // Highlight enabled control on mousedown, regardless of the mouse button.
+      if (this.isAutoState(goog.ui.Component.State.HOVER)) {
+        this.setHighlighted(true);
+      }
+      
+      // For the left button only, activate the control, and focus its key event target (if supported).
+      if (e.isButton(goog.events.BrowserEvent.MouseButton.LEFT)) {
+        if (this.isAutoState(goog.ui.Component.State.ACTIVE)) {
+          this.setActive(true);
+        }
+        if (this.isFocusable(this)) {
+          this.getKeyEventTarget().focus();
+        } else {
+          // The control isn't configured to receive keyboard focus; prevent it
+          // from stealing focus or destroying the selection.
+          e.preventDefault();
+        }
+      }
     }
 
+    // Cancel the default action unless the control allows text selection.
+    if (!this.isAllowTextSelection() && e.isButton(goog.events.BrowserEvent.MouseButton.LEFT)) {
+      e.preventDefault();
+    }
+    
+    /*
     var keyTarget = this.getKeyEventTarget();
     if (this.renderer_.hasTabIndex(keyTarget)) {
       // The container is configured to receive keyboard focus.
@@ -857,6 +875,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       // from stealing focus or destroying the selection.
       e.preventDefault();
     }
+    */
   },
 
 
@@ -868,34 +887,104 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   handleDocumentMouseUp: function(e) {
     this.setMouseButtonPressed(false);
   },
+  
+  
+  /**
+   * Handles mouseup events.  If the component is enabled, highlights it.  If
+   * the component has previously been activated, performs its associated action
+   * by calling {@link performActionInternal}, then deactivates it.  Considered
+   * protected; should only be used within this package and by subclasses.
+   * @param {goog.events.Event} e Mouse event to handle.
+   */
+  handleMouseUp = function(e) {
+    if (this.isEnabled()) {
+      if (this.isAutoState(goog.ui.Component.State.HOVER)) {
+        this.setHighlighted(true);
+      }
+      if (this.isActive() && this.performActionInternal(e) && this.isAutoState(goog.ui.Component.State.ACTIVE)) {
+        this.setActive(false);
+      }
+    }
+  },
 
 
+  /**
+   * Handles dblclick events.  Should only be registered if the user agent is
+   * IE.  If the component is enabled, performs its associated action by calling
+   * {@link performActionInternal}.  This is used to allow more performant
+   * buttons in IE.  In IE, no mousedown event is fired when that mousedown will
+   * trigger a dblclick event.  Because of this, a user clicking quickly will
+   * only cause ACTION events to fire on every other click.  This is a workaround
+   * to generate ACTION events for every click.  Unfortunately, this workaround
+   * won't ever trigger the ACTIVE state.  This is roughly the same behaviour as
+   * if this were a 'button' element with a listener on mouseup.  Considered
+   * protected; should only be used within this package and by subclasses.
+   * @param {goog.events.Event} e Mouse event to handle.
+   */
+  handleDblClick = function(e) {
+    if (this.isEnabled()) {
+      this.performActionInternal(e);
+    }
+  },
+  
+  
+  /**
+   * Performs the appropriate action when the control is activated by the user.
+   * The default implementation first updates the checked and selected state of
+   * controls that support them, then dispatches an ACTION event.  Considered
+   * protected; should only be used within this package and by subclasses.
+   * @param {goog.events.Event} e Event that triggered the action.
+   * @return {boolean} Whether the action is allowed to proceed.
+   * @protected
+   */
+  performActionInternal = function(e) {
+    if (this.isAutoState(goog.ui.Component.State.CHECKED)) {
+      this.setChecked(!this.isChecked());
+    }
+    if (this.isAutoState(goog.ui.Component.State.SELECTED)) {
+      this.setSelected(true);
+    }
+    if (this.isAutoState(goog.ui.Component.State.OPENED)) {
+      this.setOpen(!this.isOpen());
+    }
+
+    var actionEvent = new goog.events.Event(goog.ui.Component.EventType.ACTION, this);
+    if (e) {
+      var properties = ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'];
+      for (var property, i = 0; property = properties[i]; i++) {
+        actionEvent[property] = e[property];
+      }
+    }
+    return this.dispatchEvent(actionEvent);
+  },
+  
+  
   /**
    * Handles mouse events originating from nodes belonging to the controls hosted
    * in the container.  Locates the child control based on the DOM node that
    * dispatched the event, and forwards the event to the control for handling.
    * @param {goog.events.BrowserEvent} e Mouse event to handle.
    */
-  handleChildMouseEvents: function(e) {
-    var control = this.getOwnerControl(/** @type {Node} */ (e.target));
-    if (control) {
-      // Child control identified; forward the event.
-      switch (e.type) {
-        case goog.events.EventType.MOUSEDOWN:
-          control.handleMouseDown(e);
-          break;
-        case goog.events.EventType.MOUSEUP:
-          control.handleMouseUp(e);
-          break;
-        case goog.events.EventType.MOUSEOVER:
-          control.handleMouseOver(e);
-          break;
-        case goog.events.EventType.MOUSEOUT:
-          control.handleMouseOut(e);
-          break;
-      }
-    }
-  },
+  // handleChildMouseEvents: function(e) {
+  //   var control = this.getOwnerControl(/** @type {Node} */ (e.target));
+  //   if (control) {
+  //     // Child control identified; forward the event.
+  //     switch (e.type) {
+  //       case goog.events.EventType.MOUSEDOWN:
+  //         control.handleMouseDown(e);
+  //         break;
+  //       case goog.events.EventType.MOUSEUP:
+  //         control.handleMouseUp(e);
+  //         break;
+  //       case goog.events.EventType.MOUSEOVER:
+  //         control.handleMouseOver(e);
+  //         break;
+  //       case goog.events.EventType.MOUSEOUT:
+  //         control.handleMouseOut(e);
+  //         break;
+  //     }
+  //   }
+  // },
 
 
   /**
@@ -924,18 +1013,28 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Handles focus events raised when the container's key event target receives
-   * keyboard focus.
-   * @param {goog.events.BrowserEvent} e Focus event to handle.
+   * Handles focus events raised when the component's key event target element receives keyboard focus.
+   * If the component is focusable, updates its state and styling to indicate that it
+   * now has keyboard focus.  Considered protected; should only be used within
+   * this package and by subclasses.  <b>Warning:</b> IE dispatches focus and
+   * blur events asynchronously!
+   * @param {goog.events.BrowserEvent | goog.events.Event} e Focus event to handle.
    */
   handleFocus: function(e) {
-    // No-op in the base class.
+    if (this.isAutoState(goog.ui.Component.State.FOCUSED)) {
+      this.setFocused(true);
+    }
   },
 
 
   /**
-   * Handles blur events raised when the container's key event target loses
-   * keyboard focus.  The default implementation clears the highlight index.
+   * Handles blur events raised when the container's key event target loses keyboard focus. 
+   * Always deactivates the component.  In addition, if the component is focusable,
+   * updates its state and styling to indicate that it no longer has keyboard
+   * focus.  Considered protected; should only be used within this package and
+   * by subclasses.
+   * <b>Warning:</b> IE dispatches focus and blur events asynchronously!
+   * The default implementation clears the highlight index.
    * @param {goog.events.BrowserEvent} e Blur event to handle.
    */
   handleBlur: function(e) {
@@ -944,6 +1043,12 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     // If the container loses focus, and one of its children is open, close it.
     if (this.openItem_) {
       this.openItem_.setOpen(false);
+    }
+    if (this.isAutoState(goog.ui.Component.State.ACTIVE)) {
+      this.setActive(false);
+    }
+    if (this.isAutoState(goog.ui.Component.State.FOCUSED)) {
+      this.setFocused(false);
     }
   },
 
@@ -956,7 +1061,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @return {boolean} Whether the key event was handled.
    */
   handleKeyEvent: function(e) {
-    if (this.isEnabled() && this.getChildCount() != 0 &&
+    if (this.isVisible() && this.isEnabled() && this.getChildCount() != 0 &&
         this.handleKeyEventInternal(e)) {
       e.preventDefault();
       e.stopPropagation();
@@ -993,6 +1098,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     // Either nothing is highlighted, or the highlighted control didn't handle
     // the key event, so attempt to handle it here.
     switch (e.keyCode) {
+      case goog.events.KeyCodes.ENTER:
+        this.performActionInternal(e);
+        break;
       case goog.events.KeyCodes.ESC:
         if (this.isFocusable()) {
           this.getKeyEventTarget().blur();
@@ -1086,7 +1194,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   /**
    * Adds the specified control as the last child of this container.  See
    * {@link goog.ui.Container#addChildAt} for detailed semantics.
-   * @param {goog.ui.Control} child The new child control.
+   * @param {goog.ui.Component} child The new child component.
    * @param {boolean} opt_render Whether the new child should be rendered
    *     immediately after being added (defaults to false).
    */
@@ -1100,7 +1208,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * Overrides {@link goog.ui.Component#addChildAt} by also updating the
    * container's highlight index.  Since {@link goog.ui.Component#addChild} uses
    * {@link #addChildAt} internally, we only need to override this method.
-   * @param {goog.ui.Control} control New child.
+   * @param {goog.ui.Component} control New child.
    * @param {number} index Index at which the new child is to be added.
    * @param {boolean} opt_render Whether the new child should be rendered
    *     immediately after being added (defaults to false).
@@ -1136,7 +1244,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * Removes a child control.  Overrides {@link goog.ui.Component#removeChild} by
    * updating the highlight index.  Since {@link goog.ui.Component#removeChildAt}
    * uses {@link #removeChild} internally, we only need to override this method.
-   * @param {string|goog.ui.Control} control The ID of the child to remove, or
+   * @param {string|goog.ui.Component} control The ID of the child to remove, or
    *     the control itself.
    * @param {boolean} opt_unrender Whether to call {@code exitDocument} on the
    *     removed control, and detach its DOM from the document (defaults to
@@ -1176,6 +1284,18 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   /************************************** View state management. *******************************/
 
 
+  /** @inheritDoc */
+  setRightToLeft: function(rightToLeft) {
+    // The superclass implementation ensures the control isn't in the document.
+    goog.ui.Control.superClass_.setRightToLeft.call(this, rightToLeft);
+
+    var element = this.getElement();
+    if (element) {
+      this.renderer_.setRightToLeft(element, rightToLeft);
+    }
+  },
+  
+  
   /**
    * Returns the container's orientation.
    * @return {?goog.ui.Container.Orientation} Container orientation.
@@ -1275,6 +1395,19 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
+   * Returns true if the control has a parent that is itself disabled, false
+   * otherwise.
+   * @return {boolean} Whether the component is hosted in a disabled container.
+   * @private
+   */
+  isParentDisabled_: function() {
+    var parent = this.getParent();
+    return !!parent && typeof parent.isEnabled == 'function' &&
+        !parent.isEnabled();
+  },
+  
+  
+  /**
    * Returns true if the container is enabled, false otherwise.
    * @return {boolean} Whether the container is enabled.
    */
@@ -1291,41 +1424,51 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {boolean} enable Whether to enable or disable the container.
    */
   setEnabled: function(enable) {
-    if (this.enabled_ != enable && this.dispatchEvent(enable ?
-        goog.ui.Component.EventType.ENABLE :
-        goog.ui.Component.EventType.DISABLE)) {
-      if (enable) {
-        // Flag the container as enabled first, then update children.  This is
-        // because controls can't be enabled if their parent is disabled.
-        this.enabled_ = true;
-        this.forEachChild(function(child) {
-          // Enable child control unless it is flagged.
-          if (child.wasDisabled) {
-            delete child.wasDisabled;
-          } else {
-            child.setEnabled(true);
-          }
-        });
-      } else {
-        // Disable children first, then flag the container as disabled.  This is
-        // because controls can't be disabled if their parent is already disabled.
-        this.forEachChild(function(child) {
-          // Disable child control, or flag it if it's already disabled.
-          if (child.isEnabled()) {
-            child.setEnabled(false);
-          } else {
-            child.wasDisabled = true;
-          }
-        });
-        this.enabled_ = false;
-        this.setMouseButtonPressed(false);
-      }
+    if (!this.isParentDisabled_() &&
+        this.isTransitionAllowed(goog.ui.Component.State.DISABLED, !enable)) {
+    
+      if (this.enabled_ != enable && 
+          this.dispatchEvent(enable ? goog.ui.Component.EventType.ENABLE : goog.ui.Component.EventType.DISABLE)) {
+        if (enable) {
+          // Flag the container as enabled first, then update children.  This is
+          // because controls can't be enabled if their parent is disabled.
+          this.enabled_ = true;
+          this.forEachChild(function(child) {
+            // Enable child control unless it is flagged.
+            if (child.wasDisabled) {
+              delete child.wasDisabled;
+            } else {
+              child.setEnabled(true);
+            }
+          });
+        } else {
+          // Disable children first, then flag the container as disabled.  This is
+          // because controls can't be disabled if their parent is already disabled.
+          this.forEachChild(function(child) {
+            // Disable child control, or flag it if it's already disabled.
+            if (child.isEnabled()) {
+              child.setEnabled(false);
+            } else {
+              child.wasDisabled = true;
+            }
+          });
+          this.enabled_ = false;
+          this.setActive(false);
+          this.setHighlighted(false);
+          this.setMouseButtonPressed(false);
+        }
 
-      if (this.isFocusable()) {
-        // Enable keyboard access only for enabled & visible components.
-        this.renderer_.enableTabIndex(this.getKeyEventTarget(),
-            enable && this.visible_);
+        if (this.isVisible()) {
+          this.renderer_.setFocusable(this, enable);
+        }
+        this.setState(goog.ui.Component.State.DISABLED, !enable);
+
+        if (this.isFocusable()) {
+          // Enable keyboard access only for enabled & visible components.
+          this.renderer_.enableTabIndex(this.getKeyEventTarget(), enable && this.visible_);
+        }
       }
+    
     }
   },
 
@@ -1376,12 +1519,335 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   setFocusableChildrenAllowed: function(focusable) {
     this.allowFocusableChildren_ = focusable;
   },
+  
+  
+  /**
+   * Returns true if the mouse button is pressed, false otherwise.
+   * @return {boolean} Whether the mouse button is pressed.
+   */
+  isMouseButtonPressed: function() {
+    return this.mouseButtonPressed_;
+  },
+
+
+  /**
+   * Sets or clears the "mouse button pressed" flag.
+   * @param {boolean} pressed Whether the mouse button is presed.
+   */
+  setMouseButtonPressed: function(pressed) {
+    this.mouseButtonPressed_ = pressed;
+  },
+
+
+  /**
+   * Returns true if the component is active (pressed), false otherwise.
+   * @return {boolean} Whether the component is active.
+   */
+  isActive: function() {
+    return this.hasState(goog.ui.Component.State.ACTIVE);
+  },
+
+
+  /**
+   * Activates or deactivates the component.  Does nothing if this state
+   * transition is disallowed.
+   * @param {boolean} active Whether to activate or deactivate the component.
+   * @see #isTransitionAllowed
+   */
+  setActive: function(active) {
+    if (this.isTransitionAllowed(goog.ui.Component.State.ACTIVE, active)) {
+      this.setState(goog.ui.Component.State.ACTIVE, active);
+    }
+  },
+
+
+  /**
+   * Returns true if the component is selected, false otherwise.
+   * @return {boolean} Whether the component is selected.
+   */
+  isSelected: function() {
+    return this.hasState(goog.ui.Component.State.SELECTED);
+  },
+
+
+  /**
+   * Selects or unselects the component.  Does nothing if this state transition
+   * is disallowed.
+   * @param {boolean} select Whether to select or unselect the component.
+   * @see #isTransitionAllowed
+   */
+  setSelected: function(select) {
+    if (this.isTransitionAllowed(goog.ui.Component.State.SELECTED, select)) {
+      this.setState(goog.ui.Component.State.SELECTED, select);
+    }
+  },
+
+
+  /**
+   * Returns true if the component is checked, false otherwise.
+   * @return {boolean} Whether the component is checked.
+   */
+  isChecked: function() {
+    return this.hasState(goog.ui.Component.State.CHECKED);
+  },
+
+
+  /**
+   * Checks or unchecks the component.  Does nothing if this state transition
+   * is disallowed.
+   * @param {boolean} check Whether to check or uncheck the component.
+   * @see #isTransitionAllowed
+   */
+  setChecked: function(check) {
+    if (this.isTransitionAllowed(goog.ui.Component.State.CHECKED, check)) {
+      this.setState(goog.ui.Component.State.CHECKED, check);
+    }
+  },
+  
+  
+  /**
+   * Returns true if the component is styled to indicate that it has keyboard
+   * focus, false otherwise.  Note that {@code isFocused()} returning true
+   * doesn't guarantee that the component's key event target has keyborad focus,
+   * only that it is styled as such.
+   * @return {boolean} Whether the component is styled to indicate as having
+   *     keyboard focus.
+   */
+  isFocused: function() {
+    return this.hasState(goog.ui.Component.State.FOCUSED);
+  },
+
+
+  /**
+   * Applies or removes styling indicating that the component has keyboard focus.
+   * Note that unlike the other "set" methods, this method is called as a result
+   * of the component's element having received or lost keyboard focus, not the
+   * other way around, so calling {@code setFocused(true)} doesn't guarantee that
+   * the component's key event target has keyboard focus, only that it is styled
+   * as such.
+   * @param {boolean} focused Whether to apply or remove styling to indicate that
+   *     the component's element has keyboard focus.
+   */
+  setFocused: function(focused) {
+    if (this.isTransitionAllowed(goog.ui.Component.State.FOCUSED, focused)) {
+      this.setState(goog.ui.Component.State.FOCUSED, focused);
+    }
+  },
+
+
+  /**
+   * Returns true if the component is open (expanded), false otherwise.
+   * @return {boolean} Whether the component is open.
+   */
+  isOpen: function() {
+    return this.hasState(goog.ui.Component.State.OPENED);
+  },
+
+
+  /**
+   * Opens (expands) or closes (collapses) the component.  Does nothing if this
+   * state transition is disallowed.
+   * @param {boolean} open Whether to open or close the component.
+   * @see #isTransitionAllowed
+   */
+  setOpen: function(open) {
+    if (this.isTransitionAllowed(goog.ui.Component.State.OPENED, open)) {
+      this.setState(goog.ui.Component.State.OPENED, open);
+    }
+  },
+  
+  
+  /**
+   * Returns the component's state as a bit mask of {@link
+   * goog.ui.Component.State}s.
+   * @return {number} Bit mask representing component state.
+   */
+  getState = function() {
+    return this.state_;
+  };
+
+
+  /**
+   * Returns true if the component is in the specified state, false otherwise.
+   * @param {goog.ui.Component.State} state State to check.
+   * @return {boolean} Whether the component is in the given state.
+   */
+  hasState = function(state) {
+    return !!(this.state_ & state);
+  };
+
+
+  /**
+   * Sets or clears the given state on the component, and updates its styling
+   * accordingly.  Does nothing if the component is already in the correct state
+   * or if it doesn't support the specified state.  Doesn't dispatch any state
+   * transition events; use advisedly.
+   * @param {goog.ui.Component.State} state State to set or clear.
+   * @param {boolean} enable Whether to set or clear the state (if supported).
+   */
+  setState = function(state, enable) {
+    if (this.isSupportedState(state) && enable != this.hasState(state)) {
+      // Delegate actual styling to the renderer, since it is DOM-specific.
+      this.renderer_.setState(this, state, enable);
+      this.state_ = enable ? this.state_ | state : this.state_ & ~state;
+    }
+  };
+
+
+  /**
+   * Sets the component's state to the state represented by a bit mask of
+   * {@link goog.ui.Component.State}s.  Unlike {@link #setState}, doesn't
+   * update the component's styling, and doesn't reject unsupported states.
+   * Called by renderers during element decoration.  Considered protected;
+   * should only be used within this package and by subclasses.
+   * @param {number} state Bit mask representing component state.
+   * @protected
+   */
+  setStateInternal = function(state) {
+    this.state_ = state;
+  };
+
+
+  /**
+   * Returns true if the component supports the specified state, false otherwise.
+   * @param {goog.ui.Component.State} state State to check.
+   * @return {boolean} Whether the component supports the given state.
+   */
+  isSupportedState: function(state) {
+    return !!(this.supportedStates_ & state);
+  },
+
+
+  /**
+   * Enables or disables support for the given state. Disabling support
+   * for a state while the component is in that state is an error.
+   * @param {goog.ui.Component.State} state State to support or de-support.
+   * @param {boolean} support Whether the component should support the state.
+   * @throws {Error} If disabling support for a state the control is currently in.
+   */
+  setSupportedState: function(state, support) {
+    if (this.isInDocument() && this.hasState(state) && !support) {
+      // Since we hook up event handlers in enterDocument(), this is an error.
+      throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
+    }
+
+    if (!support && this.hasState(state)) {
+      // We are removing support for a state that the component is currently in.
+      this.setState(state, false);
+    }
+
+    this.supportedStates_ = support ? this.supportedStates_ | state : this.supportedStates_ & ~state;
+  },
+
+
+  /**
+   * Returns true if the component provides default event handling for the state,
+   * false otherwise.
+   * @param {goog.ui.Component.State} state State to check.
+   * @return {boolean} Whether the component provides default event handling for
+   *     the state.
+   */
+  isAutoState: function(state) {
+    return !!(this.autoStates_ & state) && this.isSupportedState(state);
+  },
+
+
+  /**
+   * Enables or disables automatic event handling for the given state(s).
+   * @param {number} states Bit mask of {@link goog.ui.Component.State}s for which
+   *     default event handling is to be enabled or disabled.
+   * @param {boolean} enable Whether the component should provide default event
+   *     handling for the state(s).
+   */
+  setAutoStates: function(states, enable) {
+    this.autoStates_ = enable ?
+        this.autoStates_ | states : this.autoStates_ & ~states;
+  },
+
+
+  /**
+   * Returns true if the component is set to dispatch transition events for the
+   * given state, false otherwise.
+   * @param {goog.ui.Component.State} state State to check.
+   * @return {boolean} Whether the component dispatches transition events for
+   *     the state.
+   */
+  isDispatchTransitionEvents: function(state) {
+    return !!(this.statesWithTransitionEvents_ & state) &&
+        this.isSupportedState(state);
+  },
+
+
+  /**
+   * Enables or disables transition events for the given state(s).  Controls
+   * handle state transitions internally by default, and only dispatch state
+   * transition events if explicitly requested to do so by calling this mentod.
+   * @param {number} states Bit mask of {@link goog.ui.Component.State}s for
+   *     which transition events should be enabled or disabled.
+   * @param {boolean} enable Whether transition events should be enabled.
+   */
+  setDispatchTransitionEvents: function(states, enable) {
+    this.statesWithTransitionEvents_ = enable ?
+        this.statesWithTransitionEvents_ | states :
+        this.statesWithTransitionEvents_ & ~states;
+  },
+
+
+  /**
+   * Returns true if the transition into or out of the given state is allowed to
+   * proceed, false otherwise.  A state transition is allowed under the following
+   * conditions:
+   * <ul>
+   *   <li>the component supports the state,
+   *   <li>the component isn't already in the target state,
+   *   <li>either the component is configured not to dispatch events for this
+   *       state transition, or a transition event was dispatched and wasn't
+   *       canceled by any event listener, and
+   *   <li>the component hasn't been disposed of
+   * </ul>
+   * Considered protected; should only be used within this package and by
+   * subclasses.
+   * @param {goog.ui.Component.State} state State to/from which the control is
+   *     transitioning.
+   * @param {boolean} enable Whether the control is entering or leaving the state.
+   * @return {boolean} Whether the state transition is allowed to proceed.
+   * @protected
+   */
+  isTransitionAllowed: function(state, enable) {
+    return this.isSupportedState(state) &&
+        this.hasState(state) != enable &&
+        (!(this.statesWithTransitionEvents_ & state) || this.dispatchEvent(
+            goog.ui.Component.getStateTransitionEvent(state, enable))) &&
+        !this.isDisposed();
+  },
 
 
   /*********************************************************************************************/
   /*********************************** Highlight management. ***********************************/
 
 
+  /**
+   * Returns true if the component is currently highlighted, false otherwise.
+   * @return {boolean} Whether the component is highlighted.
+   */
+  isHighlighted: function() {
+    return this.hasState(goog.ui.Component.State.HOVER);
+  },
+  
+  
+  /**
+   * Highlights or unhighlights the component.  Does nothing if this state
+   * transition is disallowed.
+   * @param {boolean} highlight Whether to highlight or unhighlight the component.
+   * @see #isTransitionAllowed
+   */
+  setHighlighted: function(highlight) {
+    if (this.isTransitionAllowed(goog.ui.Component.State.HOVER, highlight)) {
+      this.setState(goog.ui.Component.State.HOVER, highlight);
+    }
+  },
+  
+  
   /**
    * Returns the index of the currently highlighted item (-1 if none).
    * @return {number} Index of the currently highlighted item.
@@ -1523,27 +1989,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   setHighlightedIndexFromKeyEvent: function(index) {
     this.setHighlightedIndex(index);
-  },
-
-
-  /**
-   * Returns true if the mouse button is pressed, false otherwise.
-   * @return {boolean} Whether the mouse button is pressed.
-   */
-  isMouseButtonPressed: function() {
-    return this.mouseButtonPressed_;
-  },
-
-
-  /**
-   * Sets or clears the "mouse button pressed" flag.
-   * @param {boolean} pressed Whether the mouse button is presed.
-   */
-  setMouseButtonPressed: function(pressed) {
-    this.mouseButtonPressed_ = pressed;
   }
 });
 
 // Define two constants on the View "class"
-cmvc.ui.View.EventHandlers.Parent = 1;
-cmvc.ui.View.EventHandlers.Child = 2;
+cmvc.ui.View.EventHandlers.Self = 1;
+cmvc.ui.View.EventHandlers.Parent = 2;
