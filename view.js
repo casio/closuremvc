@@ -12,6 +12,8 @@
 
 // Copyright 2007 Google Inc. All Rights Reserved.
 
+// Copyright 2009 David Ellis.
+
 /**
  * @fileoverview cmvc.ui.View implements a hybrid goog.ui.Container and goog.ui.Control.
  */
@@ -608,7 +610,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
             default:
               throw Error("Unable to attach event handler to the view. Unknown event handler reference.");
           }
-          fn = context.handleEvent;     // the context object ought to have a handleEvent() method
+          fn = context.dispatchEvent;     // the context object (a goog.ui.Component) ought to have a dispatchEvent() method
           break;
         default:
           throw Error("Unable to attach event handler to the view. Unknown event handler type.");
@@ -1379,8 +1381,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         goog.style.showElement(elem, visible);
         if (this.isFocusable()) {
           // Enable keyboard access only for enabled & visible containers.
-          this.renderer_.enableTabIndex(this.getKeyEventTarget(),
-              this.enabled_ && this.visible_);
+          this.renderer_.enableTabIndex(this.getKeyEventTarget(), this.enabled_ && this.visible_);
         }
         if (this.visible_ && !opt_force) {
           this.dispatchEvent(goog.ui.Container.EventType.AFTER_SHOW);
