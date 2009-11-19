@@ -15,7 +15,7 @@
 // Copyright 2009 David Ellis.
 
 /**
- * @fileoverview cmvc.ui.View implements a hybrid goog.ui.Container and goog.ui.Control.
+ * @fileoverview cmvc.ui.View implements a minimal set of behaviors from goog.ui.Container and goog.ui.Control.
  */
 
 goog.provide('cmvc.ui.View');
@@ -36,39 +36,10 @@ goog.require('goog.ui.ContainerRenderer');
 goog.require('goog.userAgent');
 
 
-/**
- * Base class for views. Extends {@link goog.ui.Component} by adding
- * the following:
- *  <ul>
- *    <li>a {@link goog.events.KeyHandler}, to simplify keyboard handling,
- *    <li>a pluggable <em>renderer</em> framework, to simplify the creation of
- *        containers without the need to subclass this class,
- *    <li>methods to manage child controls hosted in the container,
- *    <li>default mouse and keyboard event handling methods.
- *  </ul>
- * @param {?goog.ui.Container.Orientation} opt_orientation Container
- *     orientation; defaults to {@code VERTICAL}.
- * @param {?goog.ui.ContainerRenderer} opt_renderer Renderer used to render or
- *     decorate the container; defaults to {@link goog.ui.ContainerRenderer}.
- * @param {?goog.dom.DomHelper} opt_domHelper DOM helper, used for document
- *     interaction.
- * @extends {goog.ui.Component}
- * @constructor
- */
 cmvc.ui.View = cmvc.extend(goog.ui.Component, {
-  constructor: function(opt_orientation, opt_renderer, opt_domHelper) {
+  constructor: function(opt_domHelper) {
     cmvc.ui.View.superClass_.constructor.call(this, opt_domHelper);
 
-    this.renderer_ = opt_renderer || cmvc.ui.ViewRenderer.getInstance();
-    this.orientation_ = opt_orientation || this.renderer_.getDefaultOrientation();
-    
-    /*
-    // prepare the tag and attributes for createDom
-    this.elementTag = this.root['tag'] || 'div';
-    this.elementAttributes = goog.object.clone(this.root);
-    delete this.elementAttributes['tag'];
-    //*/
-    
     // enumerate the child views declared in this.children and add each as a child view of this view (the parent/root)
     if(this.children) {
       goog.array.forEach(cmvc.string.words(this.children), function(e, i, a) {
@@ -85,9 +56,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * This is a convenience method for applying properties to a newly created View immediately after instantiation.
    * 
    * Example:
-   *   var v = (new cmvc.ui.View(...)).extend({id: "view12", parent: thatContainer});
+   *   var v = (new cmvc.ui.View(...)).apply({id: "view12", parent: thatContainer});
    */
-  extend: function(properties) {
+  apply: function(properties) {
     goog.object.extend(this, properties);
     return this;
   },
@@ -127,22 +98,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Renderer for the container.  Defaults to {@link goog.ui.ContainerRenderer}.
-   * @type {goog.ui.ContainerRenderer?}
-   * @private
-   */
-  renderer_ = null,
-
-
-  /**
-   * Container orientation; determines layout and default keyboard navigation.
-   * @type {?goog.ui.Container.Orientation}
-   * @private
-   */
-  orientation_ = null,
-
-
-  /**
    * Whether the container is set to be visible.  Defaults to true.
    * @type {boolean}
    * @private
@@ -175,24 +130,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @private
    */
   highlightedIndex_ = -1,
-
-
-  /**
-   * The currently open (expanded) child view in this view (null if none).
-   * @type {cmvc.ui.View?}
-   * @private
-   */
-  openItem_ = null,
-
-
-  /**
-   * Whether the mouse button is held down.  Defaults to false.  This flag is set
-   * when the user mouses down over the container, and remains set until they
-   * release the mouse button.
-   * @type {boolean}
-   * @private
-   */
-  mouseButtonPressed_ = false,
 
 
   /**
@@ -267,22 +204,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   autoStates_: goog.ui.Component.State.ALL,
 
 
-  /**
-   * A bit mask of {@link goog.ui.Component.State}s for which this component
-   * dispatches state transition events.  Because events are expensive, the
-   * default behavior is to not dispatch any state transition events at all.
-   * Use the {@link #setDispatchTransitionEvents} API to request transition
-   * events  as needed.  Subclasses may enable transition events by default.
-   * Controls hosted in containers or managed by a selection model will typically
-   * want to dispatch transition events.
-   * @type {number}
-   * @private
-   */
-  statesWithTransitionEvents_: 0x00,
-
-
   /*********************************************************************************************/
-  /************************ Event handler and renderer management. *****************************/
+  /******************************* Event handler management. ***********************************/
 
 
   /**
@@ -292,8 +215,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    *     events.
    */
   getKeyEventTarget: function() {
-    // Delegate to renderer, unless we've set an explicit target.
-    return this.keyEventTarget_ || this.renderer_.getKeyEventTarget(this);
+    return this.keyEventTarget_ || this.getElement();
   },
 
 
@@ -311,8 +233,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       var newTarget = this.getKeyEventTarget();
 
       if (inDocument) {
-        // Unlisten for events on the old key target.  Requires us to reset
-        // key target state temporarily.
+        // Unlisten for events on the old key target.  Requires us to reset key target state temporarily.
         this.keyEventTarget_ = oldTarget;
         this.enableFocusHandling_(false);
         this.keyEventTarget_ = element;
@@ -322,8 +243,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         this.enableFocusHandling_(true);
       }
     } else {
-     throw Error('Can\'t set key event target for container that doesn\'t support keyboard focus!');
-   }
+      throw Error('Can\'t set key event target for container that doesn\'t support keyboard focus!');
+    }
   },
 
 
@@ -368,31 +289,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   },
   
 
-  /**
-   * Returns the renderer used by this container to render itself or to decorate
-   * an existing element.
-   * @return {goog.ui.ContainerRenderer} Renderer used by the container.
-   */
-  getRenderer: function() {
-    return this.renderer_;
-  },
-
-
-  /**
-   * Registers the given renderer with the container.  Changing renderers after
-   * the container has already been rendered or decorated is an error.
-   * @param {goog.ui.ContainerRenderer} renderer Renderer used by the container.
-   */
-  setRenderer: function(renderer) {
-    if (this.getElement()) {
-      // Too late.
-      throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
-    }
-
-    this.renderer_ = renderer;
-  },
-
-
   /*********************************************************************************************/
   /************************* Standard cmvc.ui.View implementation. *****************************/
 
@@ -429,11 +325,12 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   
   
   renderChildren: function() {
-    if(this.element_) {
+    if(this.isInDocument()) {
+      var element = this.getElement();
       // render any child views that haven't been rendered yet
       this.forEachChild(function(child, i) {
-        if(!child.isInDocument()) {
-          child.render(this.element_);
+        if (!child.isInDocument() && !child.getElement()) {
+          child.render(element);
         }
       }, this);
     }
@@ -444,111 +341,66 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * Creates the container's DOM.  Overrides {@link goog.ui.Component#createDom}.
    */
   createDom: function() {
-    var element = this.renderer_.createDom(this);
+    var element;
     
-    // Delegate to renderer.
-    this.setElementInternal(element);
+    // using the default goog.dom.createDom function
+    //element = this.getDomHelper().createDom(container.elementTag, container.elementAttributes);
     
-    // Initialize ARIA role.
-    this.renderer_.setAriaRole(element);
-
-    // Initialize text selection.
-    if (!this.isAllowTextSelection()) {
-      // The renderer is assumed to create selectable elements.  Since making
-      // elements unselectable is expensive, only do it if needed (bug 1037090).
-      this.renderer_.setAllowTextSelection(element, false);
-    }
-
-    // Initialize visibility.
-    if (!this.isVisible()) {
-      // The renderer is assumed to create visible elements. Since hiding
-      // elements can be expensive, only do it if needed (bug 1037105).
-      this.renderer_.setVisible(element, false);
-    }
-  },
-
-
-  /**
-   * Returns the DOM element into which child components are to be rendered,
-   * or null if the container itself hasn't been rendered yet.  Overrides
-   * {@link goog.ui.Component#getContentElement} by delegating to the renderer.
-   * @return {Element?} Element to contain child elements (null if none).
-   */
-  getContentElement: function() {
-    // Delegate to renderer.
-    return this.renderer_.getContentElement(this.getElement());
-  },
-
-
-  /**
-   * Returns true if the given element can be decorated by this container.
-   * Overrides {@link goog.ui.Component#canDecorate}.
-   * @param {Element} element Element to decorate.
-   * @return {boolean} True iff the element can be decorated.
-   */
-  canDecorate: function(element) {
-    // Delegate to renderer.
-    return this.renderer_.canDecorate(element);
-  },
-
-
-  /**
-   * Decorates the given element with this component. Overrides {@link
-   * goog.ui.Component#decorateInternal} by delegating DOM manipulation
-   * to the control's renderer.
-   * @param {Element} element Element to decorate.
-   * @protected
-   * @override
-   */
-  decorateInternal: function(element) {
-    element = this.renderer_.decorate(this, element);
-
-    // Delegate to renderer.
+    // using the cmvc.Template
+    element = cmvc.Template.createTemplate(container.root).createElement(container);
+    
+    // set the element
     this.setElementInternal(element);
-
-    // Initialize ARIA role.
-    this.renderer_.setAriaRole(element);
-
-    // Initialize text selection.
-    if (!this.isAllowTextSelection()) {
-      // Decorated elements are assumed to be selectable.  Since making elements
-      // unselectable is expensive, only do it if needed (bug 1037090).
-      this.renderer_.setAllowTextSelection(element, false);
-    }
-
-    // Initialize visibility based on the decorated element's styling.
-    this.visible_ = element.style.display != 'none';
   },
+  
+  
+  /**
+   * Initializes the view's DOM when the view enters the document.
+   * Called from {@link cmvc.ui.View#enterDocument}.
+   */
+  initializeDom: function() {
+    var elem = this.getElement();
 
+    // IE doesn't support outline:none, so we have to use the hideFocus property.
+    if (goog.userAgent.IE) {
+      elem.hideFocus = true;
+    }
+    
+    // Initialize text selection.
+    this.setAllowTextSelection(this.isAllowTextSelection());
+    
+    // Initialize visibility (opt_force = true, so we don't dispatch events).
+    this.setVisible(this.isVisible(), true);
+  },
 
   /**
    * Configures the container after its DOM has been rendered, and sets up event
    * handling.  Overrides {@link goog.ui.Component#enterDocument}.
    */
   enterDocument: function() {
-    // render any unrendered child views before continuing enterDocument(), because we want them
-    // to be in the document before continuing
-    this.renderChildren();
-    
-    /**
-     * Calling the superclass enterDocument (goog.ui.Component#enterDocument) does the following, in order:
-     * 1. Sets inDocument_ to true
-     * 2. Propagate enterDocument to rendered child components (i.e. child components that have a DOM element), if any.
-     */
-    cmvc.ui.View.superClass_.enterDocument.call(this);
+    this.inDocument_ = true;
 
+    // Call the renderer's initializeDom method to initialize the container's DOM.
+    this.initializeDom(this);
+
+    // Render any unrendered child views before continuing enterDocument(), because we want them
+    // to be in the document before calling the child's enterDocument().
+    this.renderChildren();
+
+    // Propagate enterDocument to child components that have a DOM node, if any.
+    this.forEachChild(function(child) {
+      if (!child.isInDocument() && child.getElement()) {
+        child.enterDocument();
+      }
+    });
+
+    // register the child components that have a DOM node and are in the document.
     this.forEachChild(function(child) {
       if (child.isInDocument()) {
         this.registerChildId_(child);
       }
     }, this);
     
-    // Call the renderer's initializeDom method to initialize the container's DOM.
-    this.renderer_.initializeDom(this);
-    
-    // Initialize visibility (opt_force = true, so we don't dispatch events).
-    this.setVisible(this.visible_, true);
-
     // Initialize event handling if at least one state other than DISABLED is supported.
     if (this.supportedStates_ & ~goog.ui.Component.State.DISABLED) {
       // If the container is focusable, set up keyboard event handling.
@@ -556,8 +408,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         this.enableFocusHandling_(true);
       }
 
-      // Initialize mouse event handling if the view is configured to handle
-      // its own mouse events.
+      // Initialize mouse event handling if the view is configured to handle its own mouse events.
       if (this.isHandleOwnMouseEvents()) {
         this.enableMouseEventHandling_(true);
       }
@@ -580,6 +431,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     var fn = null,
         context = null;
     
+    // enable = goog.isDef(enable) ? enable : true;
     viewEvents = viewEvents || this.viewEvents || {};
     
     goog.object.forEach(viewEvents, function(handler, evt, o) {
@@ -616,10 +468,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
           throw Error("Unable to attach event handler to the view. Unknown event handler type.");
       }
       
-      // I started attaching events like this:
-      //goog.events.listen(this, e, fn, false, context);
-      // but I'd rather use this object's EventHandler object, like below, instead of the global listen "registry"
-      //   because all I have to do to stop listening to the events is to dispose of the EventHandler object.
       this.getHandler().listen(this, evt, fn, false, context);
     });
   },
@@ -632,7 +480,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   attachDeclaredDomEventHandlers: function(domEvents) {
     var elem = this.getElement();
     
-    domEvents = domEvents || this.domEvents || {};
+    domEvents = domEvents || this.domEvents || [];
     
     if(elem) {
       // create the initial event handlers
@@ -703,19 +551,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     // {@link goog.ui.Component#exitDocument}, otherwise it has no effect.
     this.setHighlightedIndex(-1);
 
-    if (this.openItem_) {
-      this.openItem_.setOpen(false);
-    }
-
-    this.mouseButtonPressed_ = false;
+    this.setMouseButtonPressed(false);
     
-    /**
-     * goog.ui.Component#exitDocument does the following, in order:
-     * 1. Propagate exitDocument to child components that have been rendered, if any.
-     * 2. Removes all event handlers from the goog.events.EventHandler object returned by this.getHandler().
-     */
-    cmvc.ui.View.superClass_.exitDocument.call(this);
-    
+    // Remove all key event listeners
     if (this.keyHandler_) {
       this.keyHandler_.detach();
     }
@@ -723,6 +561,14 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     if (this.isVisible() && this.isEnabled()) {
       this.setFocusable(false);
     }
+
+    /**
+     * goog.ui.Component#exitDocument does the following, in order:
+     * 1. Propagate exitDocument to child components that have been rendered, if any.
+     * 2. Removes all event handlers from the goog.events.EventHandler object returned by this.getHandler().
+     * 3. Sets this.inDocument_ to false.
+     */
+    cmvc.ui.View.superClass_.exitDocument.call(this);
   },
 
 
@@ -730,14 +576,13 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   disposeInternal: function() {
     cmvc.ui.View.superClass_.disposeInternal.call(this);
 
+    // completely dispose of the key handler
     if (this.keyHandler_) {
       this.keyHandler_.dispose();
-      this.keyHandler_ = null;
+      delete this.keyHandler_;
     }
 
     this.childElementIdMap_ = null;
-    this.openItem_ = null;
-    this.renderer_ = null;
   },
 
 
@@ -746,10 +591,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Handles ENTER events raised by child controls when they are navigated to.
+   * Handles ENTER events raised by child views when they are navigated to.
    * @param {goog.events.Event} e ENTER event to handle.
-   * @return {boolean} Whether to prevent handleMouseOver from handling
-   *    the event.
+   * @return {boolean} Whether to prevent handleMouseOver from handling the event.
    */
   handleEnterItem: function(e) {
     // Allow the Control to highlight itself.
@@ -758,11 +602,11 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Handles HIGHLIGHT events dispatched by items in the container when they are highlighted.
+   * Handles HIGHLIGHT events dispatched by child views in the container when they are highlighted.
    * @param {goog.events.Event} e Highlight event to handle.
    */
   handleHighlightItem: function(e) {
-    var index = this.indexOfChild(/** @type {cmvc.ui.View | goog.ui.Control} */ (e.target));
+    var index = this.indexOfChild(/** @type {goog.ui.Component} */ (e.target));
     if (index > -1 && index != this.highlightedIndex_) {
       var item = this.getHighlighted();
       if (item) {
@@ -780,29 +624,18 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         // harm in doing it for keyboard or programmatic highlights.
         item.setActive(true);
       }
-
-      // Open follows highlight.
-      if (this.openItem_ && item != this.openItem_) {
-        if (item.isSupportedState(goog.ui.Component.State.OPENED)) {
-          item.setOpen(true);
-        } else {
-          this.openItem_.setOpen(false);
-        }
-      }
     }
-    goog.dom.a11y.setState(this.getElement(), goog.dom.a11y.State.ACTIVEDESCENDANT, e.target.getElement().id);
   },
 
 
   /**
-   * Handles UNHIGHLIGHT events dispatched by items in the container when they are unhighlighted.
+   * Handles UNHIGHLIGHT events dispatched by child views in the container when they are unhighlighted.
    * @param {goog.events.Event} e Unhighlight event to handle.
    */
   handleUnHighlightItem: function(e) {
     if (e.target == this.getHighlighted()) {
       this.highlightedIndex_ = -1;
     }
-    goog.dom.a11y.setState(this.getElement(), goog.dom.a11y.State.ACTIVEDESCENDANT, '');
   },
 
 
@@ -811,13 +644,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {goog.events.Event} e Open event to handle.
    */
   handleOpenItem: function(e) {
-    var item = /** @type {cmvc.ui.View | goog.ui.Control} */ (e.target);
-    if (item && item != this.openItem_ && item.getParent() == this) {
-      if (this.openItem_) {
-        this.openItem_.setOpen(false);
-      }
-      this.openItem_ = item;
-    }
+    // Do nothing. I don't want to deal with open items in View.
+    // This should be a control-specific thing, and does not belong in View.
+    // I only keep these event handlers here so View can house goog.ui.Control objects.
   },
 
 
@@ -826,9 +655,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {goog.events.Event} e Close event to handle.
    */
   handleCloseItem: function(e) {
-    if (e.target == this.openItem_) {
-      this.openItem_ = null;
-    }
+    // Do nothing. I don't want to deal with open items in View.
+    // This should be a control-specific thing, and does not belong in View.
+    // I only keep these event handlers here so View can house goog.ui.Control objects.
   },
 
   
@@ -866,18 +695,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     if (!this.isAllowTextSelection() && e.isButton(goog.events.BrowserEvent.MouseButton.LEFT)) {
       e.preventDefault();
     }
-    
-    /*
-    var keyTarget = this.getKeyEventTarget();
-    if (this.renderer_.hasTabIndex(keyTarget)) {
-      // The container is configured to receive keyboard focus.
-      keyTarget.focus();
-    } else {
-      // The control isn't configured to receive keyboard focus; prevent it
-      // from stealing focus or destroying the selection.
-      e.preventDefault();
-    }
-    */
   },
 
 
@@ -898,7 +715,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * protected; should only be used within this package and by subclasses.
    * @param {goog.events.Event} e Mouse event to handle.
    */
-  handleMouseUp = function(e) {
+  handleMouseUp: function(e) {
     if (this.isEnabled()) {
       if (this.isAutoState(goog.ui.Component.State.HOVER)) {
         this.setHighlighted(true);
@@ -923,7 +740,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * protected; should only be used within this package and by subclasses.
    * @param {goog.events.Event} e Mouse event to handle.
    */
-  handleDblClick = function(e) {
+  handleDblClick: function(e) {
     if (this.isEnabled()) {
       this.performActionInternal(e);
     }
@@ -932,24 +749,13 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   
   /**
    * Performs the appropriate action when the control is activated by the user.
-   * The default implementation first updates the checked and selected state of
-   * controls that support them, then dispatches an ACTION event.  Considered
+   * The default implementation dispatches an ACTION event.  Considered
    * protected; should only be used within this package and by subclasses.
    * @param {goog.events.Event} e Event that triggered the action.
    * @return {boolean} Whether the action is allowed to proceed.
    * @protected
    */
-  performActionInternal = function(e) {
-    if (this.isAutoState(goog.ui.Component.State.CHECKED)) {
-      this.setChecked(!this.isChecked());
-    }
-    if (this.isAutoState(goog.ui.Component.State.SELECTED)) {
-      this.setSelected(true);
-    }
-    if (this.isAutoState(goog.ui.Component.State.OPENED)) {
-      this.setOpen(!this.isOpen());
-    }
-
+  performActionInternal: function(e) {
     var actionEvent = new goog.events.Event(goog.ui.Component.EventType.ACTION, this);
     if (e) {
       var properties = ['altKey', 'ctrlKey', 'metaKey', 'shiftKey'];
@@ -990,16 +796,13 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Returns the child control that owns the given DOM node, or null if no such
-   * control is found.
+   * Returns the child control that owns the given DOM node, or null if no such control is found.
    * @param {Node} node DOM node whose owner is to be returned.
-   * @return {goog.ui.Control?} Control hosted in the container to which the node
-   *     belongs (if found).
+   * @return {goog.ui.Component?} View hosted in the container to which the node belongs (if found).
    * @protected
    */
   getOwnerControl: function(node) {
-    // Ensure that this container actually has child controls before
-    // looking up the owner.
+    // Ensure that this container actually has child controls before looking up the owner.
     if (this.childElementIdMap_) {
       var elem = this.getElement();
       while (node && node.parentNode && node != elem) {
@@ -1042,10 +845,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   handleBlur: function(e) {
     this.setHighlightedIndex(-1);
     this.setMouseButtonPressed(false);
-    // If the container loses focus, and one of its children is open, close it.
-    if (this.openItem_) {
-      this.openItem_.setOpen(false);
-    }
     if (this.isAutoState(goog.ui.Component.State.ACTIVE)) {
       this.setActive(false);
     }
@@ -1063,8 +862,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @return {boolean} Whether the key event was handled.
    */
   handleKeyEvent: function(e) {
-    if (this.isVisible() && this.isEnabled() && this.getChildCount() != 0 &&
-        this.handleKeyEventInternal(e)) {
+    if (this.isVisible() && this.isEnabled() && this.getChildCount() != 0 && this.handleKeyEventInternal(e)) {
       e.preventDefault();
       e.stopPropagation();
       return true;
@@ -1085,15 +883,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   handleKeyEventInternal: function(e) {
     // Give the highlighted control the chance to handle the key event.
     var highlighted = this.getHighlighted();
-    if (highlighted && typeof highlighted.handleKeyEvent == 'function' &&
-        highlighted.handleKeyEvent(e)) {
-      return true;
-    }
-
-    // Give the open control the chance to handle the key event.
-    if (this.openItem_ && this.openItem_ != highlighted &&
-        typeof this.openItem_.handleKeyEvent == 'function' &&
-        this.openItem_.handleKeyEvent(e)) {
+    if (highlighted && typeof highlighted.handleKeyEvent == 'function' && highlighted.handleKeyEvent(e)) {
       return true;
     }
 
@@ -1120,42 +910,20 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         break;
 
       case goog.events.KeyCodes.UP:
-        if (this.orientation_ == goog.ui.Container.Orientation.VERTICAL) {
-          this.highlightPrevious();
-        } else {
-          return false;
-        }
-        break;
-
       case goog.events.KeyCodes.LEFT:
-        if (this.orientation_ == goog.ui.Container.Orientation.HORIZONTAL) {
-          if (this.isRightToLeft()) {
-            this.highlightNext();
-          } else {
-            this.highlightPrevious();
-          }
+        if (this.isRightToLeft()) {
+          this.highlightNext();
         } else {
-          return false;
+          this.highlightPrevious();
         }
         break;
 
       case goog.events.KeyCodes.DOWN:
-        if (this.orientation_ == goog.ui.Container.Orientation.VERTICAL) {
-          this.highlightNext();
-        } else {
-          return false;
-        }
-        break;
-
       case goog.events.KeyCodes.RIGHT:
-        if (this.orientation_ == goog.ui.Container.Orientation.HORIZONTAL) {
-          if (this.isRightToLeft()) {
-            this.highlightPrevious();
-          } else {
-            this.highlightNext();
-          }
+        if (this.isRightToLeft()) {
+          this.highlightPrevious();
         } else {
-          return false;
+          this.highlightNext();
         }
         break;
 
@@ -1168,7 +936,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /*********************************************************************************************/
-  /************************************ Child component management. ****************************/
+  /********************************* Child component management. *******************************/
 
 
   /**
@@ -1216,20 +984,19 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    *     immediately after being added (defaults to false).
    */
   addChildAt: function(control, index, opt_render) {
-    // Make sure the child control dispatches HIGHLIGHT, UNHIGHLIGHT, OPEN, and
-    // CLOSE events, and that it doesn't steal keyboard focus.
+    // Make sure the child control dispatches HIGHLIGHT and UNHIGHLIGHT events, and that it doesn't steal keyboard focus.
     control.setDispatchTransitionEvents(goog.ui.Component.State.HOVER, true);
     control.setDispatchTransitionEvents(goog.ui.Component.State.OPENED, true);
+    
     if (this.isFocusable() || !this.isFocusableChildrenAllowed()) {
       control.setSupportedState(goog.ui.Component.State.FOCUSED, false);
     }
 
     // Disable mouse event handling by child controls.
-    control.setHandleMouseEvents(false);
+    //control.setHandleMouseEvents(false);
 
     // Let the superclass implementation do the work.
-    cmvc.ui.View.superClass_.addChildAt.call(this, control, index,
-        opt_render);
+    cmvc.ui.View.superClass_.addChildAt.call(this, control, index, opt_render);
 
     if (opt_render && this.isInDocument()) {
       this.registerChildId_(control);
@@ -1251,12 +1018,12 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {boolean} opt_unrender Whether to call {@code exitDocument} on the
    *     removed control, and detach its DOM from the document (defaults to
    *     false).
-   * @return {goog.ui.Control} The removed control, if any.
+   * @return {goog.ui.Component} The removed control, if any.
    */
   removeChild: function(control, opt_unrender) {
     // TODO: Fix implementation so that it works if control is a string.
 
-    var index = this.indexOfChild(/** @type {goog.ui.Control} */ (control));
+    var index = this.indexOfChild(/** @type {goog.ui.Component} */ (control));
     if (index != -1) {
       if (index == this.highlightedIndex_) {
         control.setHighlighted(false);
@@ -1271,12 +1038,10 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       goog.object.remove(this.childElementIdMap_, childElem.id);
     }
 
-    control = /** @type {goog.ui.Control} */ (
-        cmvc.ui.View.superClass_.removeChild.call(this, control,
-            opt_unrender));
+    control = /** @type {goog.ui.Component} */ (cmvc.ui.View.superClass_.removeChild.call(this, control, opt_unrender));
 
     // Re-enable mouse event handling (in case the control is reused elsewhere).
-    control.setHandleMouseEvents(true);
+    //control.setHandleMouseEvents(true);
 
     return control;
   },
@@ -1284,42 +1049,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
   /*********************************************************************************************/
   /************************************** View state management. *******************************/
-
-
-  /** @inheritDoc */
-  setRightToLeft: function(rightToLeft) {
-    // The superclass implementation ensures the control isn't in the document.
-    goog.ui.Control.superClass_.setRightToLeft.call(this, rightToLeft);
-
-    var element = this.getElement();
-    if (element) {
-      this.renderer_.setRightToLeft(element, rightToLeft);
-    }
-  },
-  
-  
-  /**
-   * Returns the container's orientation.
-   * @return {?goog.ui.Container.Orientation} Container orientation.
-   */
-  getOrientation: function() {
-    return this.orientation_;
-  },
-
-
-  /**
-   * Sets the container's orientation.
-   * @param {goog.ui.Container.Orientation} orientation Container orientation.
-   */
-  // TODO: Do we need to support containers with dynamic orientation?
-  setOrientation: function(orientation) {
-    if (this.getElement()) {
-      // Too late.
-      throw Error(goog.ui.Component.Error.ALREADY_RENDERED);
-    }
-
-    this.orientation_ = orientation;
-  },
 
 
   /**
@@ -1344,7 +1073,12 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
     var element = this.getElement();
     if (element) {
-      this.renderer_.setAllowTextSelection(element, allow);
+      // On all browsers other than IE and Opera, it isn't necessary to recursively
+      // apply unselectable styling to the element's children.
+      // So, only recursively mark each child element unselectable if the browser is IE or Opera, otherwise, don't.
+      // Recursively marking each child element unselectable is expensive and unnecessary, 
+      // so in browsers other than IE/Opera only mark the root element unselectable.
+      goog.style.setUnselectable(element, !allow, !goog.userAgent.IE && !goog.userAgent.OPERA);
     }
   },
   
@@ -1372,8 +1106,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @return {boolean} Whether the visibility was changed.
    */
   setVisible: function(visible, opt_force) {
-    if (opt_force || (this.visible_ != visible && this.dispatchEvent(visible ?
-        goog.ui.Component.EventType.SHOW : goog.ui.Component.EventType.HIDE))) {
+    if (opt_force || 
+        (this.visible_ != visible && 
+         this.dispatchEvent(visible ? goog.ui.Component.EventType.BEFORE_SHOW : goog.ui.Component.EventType.HIDE))) {
       this.visible_ = visible;
 
       var elem = this.getElement();
@@ -1381,10 +1116,10 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         goog.style.showElement(elem, visible);
         if (this.isFocusable()) {
           // Enable keyboard access only for enabled & visible containers.
-          this.renderer_.enableTabIndex(this.getKeyEventTarget(), this.enabled_ && this.visible_);
+          this.enableTabIndex(this.getKeyEventTarget(), this.enabled_ && this.visible_);
         }
         if (this.visible_ && !opt_force) {
-          this.dispatchEvent(goog.ui.Container.EventType.AFTER_SHOW);
+          this.dispatchEvent(goog.ui.Component.EventType.SHOW);
         }
       }
 
@@ -1403,8 +1138,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   isParentDisabled_: function() {
     var parent = this.getParent();
-    return !!parent && typeof parent.isEnabled == 'function' &&
-        !parent.isEnabled();
+    return !!parent && typeof parent.isEnabled == 'function' && parent.isEnabled();
   },
   
   
@@ -1460,13 +1194,13 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         }
 
         if (this.isVisible()) {
-          this.renderer_.setFocusable(this, enable);
+          this.setFocusable(enable);
         }
         this.setState(goog.ui.Component.State.DISABLED, !enable);
 
         if (this.isFocusable()) {
           // Enable keyboard access only for enabled & visible components.
-          this.renderer_.enableTabIndex(this.getKeyEventTarget(), enable && this.visible_);
+          this.enableTabIndex(this.getKeyEventTarget(), enable && this.visible_);
         }
       }
     
@@ -1497,11 +1231,48 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     }
     this.focusable_ = focusable;
     if (this.enabled_ && this.visible_) {
-      this.renderer_.enableTabIndex(this.getKeyEventTarget(), focusable);
+      this.enableTabIndex(this.getKeyEventTarget(), focusable);
+    }
+  },
+  
+  
+  /**
+   * Enables or disables the tab index of the element.  Only elements with a
+   * valid tab index can receive focus.
+   * @param {Element} element Element whose tab index is to be changed.
+   * @param {boolean} enable Whether to add or remove the element's tab index.
+   */
+  enableTabIndex: function(element, enable) {
+    if (element) {
+      element.tabIndex = enable ? 0 : -1;
     }
   },
 
 
+  /**
+   * Returns true if the element has a valid tab index (defined as >= 0), false
+   * otherwise.  Only elements with a valid tab index can receive focus.
+   * @param {Element?} element Element to check.
+   * @return {boolean} Whether the element has a tab index.
+   */
+  hasTabIndex: function(element) {
+    if (element) {
+      // IE returns a value of 0 for an unset tabIndex.  Therefore, we must use
+      // getAttributeNode('tabIndex'), which returns an object with a 'specified'
+      // property if tabIndex is specified.  For more info, see
+      // http://fluidproject.org/blog/2008/01/09/getting-setting-and-removing-tabindex-values-with-javascript/
+      var attrNode = element.getAttributeNode('tabindex');
+      if (attrNode && attrNode.specified) {
+        // TabIndex is specified.
+        var index = element.tabIndex;
+        return goog.isNumber(index) && index >= 0;
+      }
+    }
+    // Either the element is null, or tabIndex is not specified.
+    return false;
+  },
+  
+  
   /**
    * Returns true if the container allows children to be focusable, false
    * otherwise.  Only effective if the container is not focusable.
@@ -1563,50 +1334,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Returns true if the component is selected, false otherwise.
-   * @return {boolean} Whether the component is selected.
-   */
-  isSelected: function() {
-    return this.hasState(goog.ui.Component.State.SELECTED);
-  },
-
-
-  /**
-   * Selects or unselects the component.  Does nothing if this state transition
-   * is disallowed.
-   * @param {boolean} select Whether to select or unselect the component.
-   * @see #isTransitionAllowed
-   */
-  setSelected: function(select) {
-    if (this.isTransitionAllowed(goog.ui.Component.State.SELECTED, select)) {
-      this.setState(goog.ui.Component.State.SELECTED, select);
-    }
-  },
-
-
-  /**
-   * Returns true if the component is checked, false otherwise.
-   * @return {boolean} Whether the component is checked.
-   */
-  isChecked: function() {
-    return this.hasState(goog.ui.Component.State.CHECKED);
-  },
-
-
-  /**
-   * Checks or unchecks the component.  Does nothing if this state transition
-   * is disallowed.
-   * @param {boolean} check Whether to check or uncheck the component.
-   * @see #isTransitionAllowed
-   */
-  setChecked: function(check) {
-    if (this.isTransitionAllowed(goog.ui.Component.State.CHECKED, check)) {
-      this.setState(goog.ui.Component.State.CHECKED, check);
-    }
-  },
-  
-  
-  /**
    * Returns true if the component is styled to indicate that it has keyboard
    * focus, false otherwise.  Note that {@code isFocused()} returning true
    * doesn't guarantee that the component's key event target has keyborad focus,
@@ -1637,35 +1364,13 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Returns true if the component is open (expanded), false otherwise.
-   * @return {boolean} Whether the component is open.
-   */
-  isOpen: function() {
-    return this.hasState(goog.ui.Component.State.OPENED);
-  },
-
-
-  /**
-   * Opens (expands) or closes (collapses) the component.  Does nothing if this
-   * state transition is disallowed.
-   * @param {boolean} open Whether to open or close the component.
-   * @see #isTransitionAllowed
-   */
-  setOpen: function(open) {
-    if (this.isTransitionAllowed(goog.ui.Component.State.OPENED, open)) {
-      this.setState(goog.ui.Component.State.OPENED, open);
-    }
-  },
-  
-  
-  /**
    * Returns the component's state as a bit mask of {@link
    * goog.ui.Component.State}s.
    * @return {number} Bit mask representing component state.
    */
-  getState = function() {
+  getState: function() {
     return this.state_;
-  };
+  },
 
 
   /**
@@ -1673,9 +1378,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {goog.ui.Component.State} state State to check.
    * @return {boolean} Whether the component is in the given state.
    */
-  hasState = function(state) {
+  hasState: function(state) {
     return !!(this.state_ & state);
-  };
+  },
 
 
   /**
@@ -1686,13 +1391,11 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {goog.ui.Component.State} state State to set or clear.
    * @param {boolean} enable Whether to set or clear the state (if supported).
    */
-  setState = function(state, enable) {
+  setState: function(state, enable) {
     if (this.isSupportedState(state) && enable != this.hasState(state)) {
-      // Delegate actual styling to the renderer, since it is DOM-specific.
-      this.renderer_.setState(this, state, enable);
       this.state_ = enable ? this.state_ | state : this.state_ & ~state;
     }
-  };
+  },
 
 
   /**
@@ -1704,9 +1407,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @param {number} state Bit mask representing component state.
    * @protected
    */
-  setStateInternal = function(state) {
+  setStateInternal: function(state) {
     this.state_ = state;
-  };
+  },
 
 
   /**
@@ -1761,8 +1464,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    *     handling for the state(s).
    */
   setAutoStates: function(states, enable) {
-    this.autoStates_ = enable ?
-        this.autoStates_ | states : this.autoStates_ & ~states;
+    this.autoStates_ = enable ? this.autoStates_ | states : this.autoStates_ & ~states;
   },
 
 
@@ -1774,8 +1476,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    *     the state.
    */
   isDispatchTransitionEvents: function(state) {
-    return !!(this.statesWithTransitionEvents_ & state) &&
-        this.isSupportedState(state);
+    return !!(this.statesWithTransitionEvents_ & state) && this.isSupportedState(state);
   },
 
 
@@ -1789,8 +1490,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   setDispatchTransitionEvents: function(states, enable) {
     this.statesWithTransitionEvents_ = enable ?
-        this.statesWithTransitionEvents_ | states :
-        this.statesWithTransitionEvents_ & ~states;
+                                       this.statesWithTransitionEvents_ | states :
+                                       this.statesWithTransitionEvents_ & ~states;
   },
 
 
@@ -1816,10 +1517,10 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   isTransitionAllowed: function(state, enable) {
     return this.isSupportedState(state) &&
-        this.hasState(state) != enable &&
-        (!(this.statesWithTransitionEvents_ & state) || this.dispatchEvent(
-            goog.ui.Component.getStateTransitionEvent(state, enable))) &&
-        !this.isDisposed();
+           this.hasState(state) != enable &&
+           (!(this.statesWithTransitionEvents_ & state) || 
+            this.dispatchEvent(goog.ui.Component.getStateTransitionEvent(state, enable))) &&
+           !this.isDisposed();
   },
 
 
@@ -1957,7 +1658,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     curIndex = fn(curIndex, numItems);
     var visited = 0;
     while (visited <= numItems) {
-      var control = /** @type {goog.ui.Control} */ (this.getChildAt(curIndex));
+      var control = /** @type {goog.ui.Component} */ (this.getChildAt(curIndex));
       if (control && this.canHighlightItem(control)) {
         this.setHighlightedIndexFromKeyEvent(curIndex);
         return true;
