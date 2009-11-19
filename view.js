@@ -18,8 +18,11 @@
  * @fileoverview cmvc.ui.View implements a minimal set of behaviors from goog.ui.Container and goog.ui.Control.
  */
 
-goog.provide('cmvc.ui.View');
+goog.provide("cmvc.ui.View");
+goog.provide("cmvc.ui.View.EventDispatch");
 
+goog.require("goog.array");
+goog.require("goog.events");
 goog.require('goog.dom');
 goog.require('goog.dom.a11y');
 goog.require('goog.dom.a11y.State');
@@ -27,6 +30,7 @@ goog.require('goog.events.EventType');
 goog.require('goog.events.KeyCodes');
 goog.require('goog.events.KeyHandler');
 goog.require('goog.events.KeyHandler.EventType');
+goog.require("goog.object");
 goog.require('goog.style');
 goog.require('goog.ui.Component');
 goog.require('goog.ui.Component.Error');
@@ -34,6 +38,10 @@ goog.require('goog.ui.Component.EventType');
 goog.require('goog.ui.Component.State');
 goog.require('goog.ui.ContainerRenderer');
 goog.require('goog.userAgent');
+
+goog.require("cmvc");
+goog.require("cmvc.string");
+goog.require("cmvc.Template");
 
 
 cmvc.ui.View = cmvc.extend(goog.ui.Component, {
@@ -49,6 +57,13 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         this.addChild(new (this[e])(opt_domHelper), false);
       }, this);
     }
+    
+    this.viewEvents = {};
+    this.viewEvents[goog.ui.Component.EventType.ENTER] = 'this.handleEnterItem';
+    this.viewEvents[goog.ui.Component.EventType.HIGHLIGHT] = 'this.handleHighlightItem';
+    this.viewEvents[goog.ui.Component.EventType.UNHIGHLIGHT] = 'this.handleUnHighlightItem';
+    this.viewEvents[goog.ui.Component.EventType.OPEN] = 'this.handleOpenItem';      // for backward compatibility only
+    this.viewEvents[goog.ui.Component.EventType.CLOSE] = 'this.handleCloseItem';    // for backward compatibility only
   },
   
   
@@ -67,13 +82,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   /**
    * Default view event handlers.
    */
-  viewEvents: {
-    goog.ui.Component.EventType.ENTER:        'this.handleEnterItem',
-    goog.ui.Component.EventType.HIGHLIGHT:    'this.handleHighlightItem',
-    goog.ui.Component.EventType.UNHIGHLIGHT:  'this.handleUnHighlightItem',
-    goog.ui.Component.EventType.OPEN:         'this.handleOpenItem',
-    goog.ui.Component.EventType.CLOSE:        'this.handleCloseItem'
-  },
+  viewEvents: null,
   
 
   /*********************************************************************************************/
@@ -86,7 +95,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {Element|undefined}
    * @private
    */
-  keyEventTarget_ = null,
+  keyEventTarget_: null,
 
 
   /**
@@ -94,7 +103,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {goog.events.KeyHandler?}
    * @private
    */
-  keyHandler_ = null,
+  keyHandler_: null,
 
 
   /**
@@ -102,7 +111,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {boolean}
    * @private
    */
-  visible_ = true,
+  visible_: true,
 
 
   /**
@@ -111,7 +120,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {boolean}
    * @private
    */
-  enabled_ = true,
+  enabled_: true,
 
 
   /**
@@ -120,7 +129,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {boolean}
    * @private
    */
-  focusable_ = true,
+  focusable_: true,
 
 
   /**
@@ -129,7 +138,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {number}
    * @private
    */
-  highlightedIndex_ = -1,
+  highlightedIndex_: -1,
 
 
   /**
@@ -137,7 +146,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {boolean}
    * @private
    */
-  allowFocusableChildren_ = false,
+  allowFocusableChildren_: false,
 
 
   /**
@@ -148,7 +157,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {Object?}
    * @private
    */
-  childElementIdMap_ = null,
+  childElementIdMap_: null,
 
 
   /**
@@ -157,7 +166,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {boolean}
    * @private
    */
-  handleOwnMouseEvents_ = true,
+  handleOwnMouseEvents_: true,
 
 
   /**
@@ -165,7 +174,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {boolean}
    * @private
    */
-  allowTextSelection_ = false,
+  allowTextSelection_: false,
 
 
   /**
@@ -173,7 +182,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {number}
    * @private
    */
-  state_ = 0x00,
+  state_: 0x00,
 
 
   /**
@@ -181,7 +190,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {number}
    * @private
    */
-  supportedStates_ = goog.ui.Component.State.DISABLED |
+  supportedStates_: goog.ui.Component.State.DISABLED |
                      goog.ui.Component.State.HOVER |
                      goog.ui.Component.State.ACTIVE |
                      goog.ui.Component.State.FOCUSED,
@@ -344,10 +353,10 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     var element;
     
     // using the default goog.dom.createDom function
-    //element = this.getDomHelper().createDom(container.elementTag, container.elementAttributes);
+    //element = this.getDomHelper().createDom(this.elementTag, this.elementAttributes);
     
     // using the cmvc.Template
-    element = cmvc.Template.createTemplate(container.root).createElement(container);
+    element = cmvc.Template.createTemplate(this.root).createElement(this);
     
     // set the element
     this.setElementInternal(element);
@@ -435,7 +444,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     viewEvents = viewEvents || this.viewEvents || {};
     
     goog.object.forEach(viewEvents, function(handler, evt, o) {
-      switch(goog.typeof(handler)) {
+      switch(goog.typeOf(handler)) {
         case "function":    // the event handler is a function object that accepts a single event object argument
           fn = handler;
           context = this;
@@ -452,11 +461,11 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
             fn = this[handler];
           }
           break;
-        case "number";      // the event handler is a reference to a specific built-in behavior
+        case "number":      // the event handler is a reference to a specific built-in behavior
           switch(handler) {
-            case cmvc.ui.View.EventHandlers.Self:
+            case cmvc.ui.View.EventDispatch.Self:
               context = this;
-            case cmvc.ui.View.EventHandlers.Parent:
+            case cmvc.ui.View.EventDispatch.Parent:
               context = this.getParent();
               break;
             default:
@@ -469,7 +478,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       }
       
       this.getHandler().listen(this, evt, fn, false, context);
-    });
+    }, this);
   },
   
   
@@ -588,6 +597,16 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
   /*********************************************************************************************/
   /*********************************** Default event handlers. *********************************/
+
+
+  /**
+   * This is the catch-all event handler.
+   */
+  /*
+  handleEvent: function(e) {
+    // do nothing
+  },
+  */
 
 
   /**
@@ -1695,5 +1714,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 });
 
 // Define two constants on the View "class"
-cmvc.ui.View.EventHandlers.Self = 1;
-cmvc.ui.View.EventHandlers.Parent = 2;
+cmvc.ui.View.EventDispatch = {
+  Self: 1,
+  Parent: 2
+};
