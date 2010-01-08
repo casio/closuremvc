@@ -29,26 +29,25 @@ cmvc.ui.LabelView = cmvc.ui.View.extend({
   updateText: function() {
     this.applyTextTemplate();
     this.getElement().innerHTML = this._content;
-  }  /*,
+  },
   
-  onPropertySet: function(property, index, value) {
+  handlePropertySet: function(property, index, value) {
     value = arguments.length == 2 ? index : value;
     
-    switch(property) {
-      case "text":
-        this.updateText();
-        break;
-      case "textParams":
-        this.updateText();
-        break;
-    }
+    this.updateText();
   }
-  */
 });
 
 cmvc.ui.ButtonView = cmvc.ui.LabelView.extend({
   root: { tag: 'a', href: 'javascript:void(null);', html: '{_content}' },
-  domEvents: ['click']
+  domEvents: ['click'],
+  
+  constructor: function(opt_orientation, opt_renderer, opt_domHelper) {
+    cmvc.ui.ButtonView.superClass_.constructor.apply(this, arguments);
+    
+    this.setFocusable(true);
+    this.setHandleMouseEvents(true);
+  }
 });
 
 cmvc.ui.InlineTextInputCursorView = cmvc.ui.View.extend({

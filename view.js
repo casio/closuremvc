@@ -15,7 +15,7 @@
 // Copyright 2009 David Ellis.
 
 /**
- * @fileoverview cmvc.ui.View implements a minimal set of behaviors from goog.ui.Container and goog.ui.Control.
+ * @fileoverview cmvc.ui.View implements a subset of behaviors from goog.ui.Container and goog.ui.Control.
  */
 
 goog.provide("cmvc.ui.View");
@@ -31,6 +31,7 @@ goog.require('goog.events.KeyCodes');
 goog.require('goog.events.KeyHandler');
 goog.require('goog.events.KeyHandler.EventType');
 goog.require("goog.object");
+goog.require("goog.string");
 goog.require('goog.style');
 goog.require('goog.ui.Component');
 goog.require('goog.ui.Component.Error');
@@ -42,6 +43,7 @@ goog.require('goog.userAgent');
 goog.require("cmvc");
 goog.require("cmvc.string");
 goog.require("cmvc.Template");
+goog.require("cmvc.kvo");
 
 
 cmvc.ui.View = cmvc.extend(goog.ui.Component, {
@@ -50,22 +52,19 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
     // enumerate the child views declared in this.children and add each as a child view of this view (the parent/root)
     if(this.children) {
+      var view = null;
       goog.array.forEach(cmvc.string.words(this.children), function(e, i, a) {
         // add child views (view objects) but do not render them yet because if we render the child view now, we
         //   are forced to create the DOM node for this view (the parent of the children) before we're ready.
         //   We only want to create the DOM node for this view when we call render().
-        this.addChild(new (this[e])(opt_domHelper), false);
+        view = new (this[e])(opt_domHelper);
+        view.setId(e);
+        this.addChild(view, false);
       }, this);
     }
     
-    this.viewEvents = {};
-    this.viewEvents[goog.ui.Component.EventType.ENTER] = 'this.handleEnterItem';
-    this.viewEvents[goog.ui.Component.EventType.HIGHLIGHT] = 'this.handleHighlightItem';
-    this.viewEvents[goog.ui.Component.EventType.UNHIGHLIGHT] = 'this.handleUnHighlightItem';
-    this.viewEvents[goog.ui.Component.EventType.OPEN] = 'this.handleOpenItem';      // for backward compatibility only
-    this.viewEvents[goog.ui.Component.EventType.CLOSE] = 'this.handleCloseItem';    // for backward compatibility only
+    this.attachDeclaredPropertyBindings();
   },
-  
   
   /**
    * This is a convenience method for applying properties to a newly created View immediately after instantiation.
@@ -77,26 +76,24 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     goog.object.extend(this, properties);
     return this;
   },
-
-
-  /**
-   * Default view event handlers.
-   */
-  viewEvents: null,
   
-
+  
   /*********************************************************************************************/
   /******View Properties (combination of goog.ui.Container and goog.ui.Control properties)******/
 
 
   /**
-   * Allows an alternative element to be set to recieve key events, otherwise
-   * defers to the renderer's element choice.
+   * Default view and DOM event handler declarations.
+   */
+  viewEvents: {},
+  domEvents: {},
+
+  /**
+   * Allows an alternative element to be set to recieve key events, otherwise defers to the renderer's element choice.
    * @type {Element|undefined}
    * @private
    */
   keyEventTarget_: null,
-
 
   /**
    * Keyboard event handler.
@@ -105,14 +102,12 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   keyHandler_: null,
 
-
   /**
    * Whether the container is set to be visible.  Defaults to true.
    * @type {boolean}
    * @private
    */
   visible_: true,
-
 
   /**
    * Whether the container is enabled and reacting to keyboard and mouse events.
@@ -122,24 +117,20 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   enabled_: true,
 
-
   /**
    * Whether the container supports keyboard focus.  Defaults to true.  Focusable
    * containers have a {@code tabIndex} and can be navigated to via the keyboard.
    * @type {boolean}
    * @private
    */
-  focusable_: true,
-
+  focusable_: false,
 
   /**
-   * The 0-based index of the currently highlighted control in the container
-   * (-1 if none).
+   * The 0-based index of the currently highlighted control in the container (-1 if none).
    * @type {number}
    * @private
    */
   highlightedIndex_: -1,
-
 
   /**
    * Whether focus of child componenets should be allowed.  Only effective if focusable_ is set to false.
@@ -148,17 +139,14 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   allowFocusableChildren_: false,
 
-
   /**
-   * Map of DOM IDs to child controls.  Each key is the DOM ID of a child
-   * control's root element; each value is a reference to the child control
-   * itself.  Used for looking up the child control corresponding to a DOM
-   * node in O(1) time.
+   * Map of DOM IDs to child controls.  Each key is the DOM ID of a child control's root element; 
+   * each value is a reference to the child control itself.  
+   * Used for looking up the child control corresponding to a DOM node in O(1) time.
    * @type {Object?}
    * @private
    */
   childElementIdMap_: null,
-
 
   /**
    * Whether the view should listen for and handle its own mouse events; defaults to true.
@@ -166,8 +154,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    * @type {boolean}
    * @private
    */
-  handleOwnMouseEvents_: true,
-
+  handleOwnMouseEvents_: false,
 
   /**
    * Whether the view allows text selection within its DOM.  Defaults to false.
@@ -176,7 +163,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   allowTextSelection_: false,
 
-
   /**
    * Current component state; a bit mask of {@link goog.ui.Component.State}s.
    * @type {number}
@@ -184,17 +170,15 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   state_: 0x00,
 
-
   /**
    * A bit mask of {@link goog.ui.Component.State}s this component supports.
    * @type {number}
    * @private
    */
   supportedStates_: goog.ui.Component.State.DISABLED |
-                     goog.ui.Component.State.HOVER |
-                     goog.ui.Component.State.ACTIVE |
-                     goog.ui.Component.State.FOCUSED,
-
+                    goog.ui.Component.State.HOVER |
+                    goog.ui.Component.State.ACTIVE |
+                    goog.ui.Component.State.FOCUSED,
 
   /**
    * A bit mask of {@link goog.ui.Component.State}s for which this component
@@ -226,8 +210,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   getKeyEventTarget: function() {
     return this.keyEventTarget_ || this.getElement();
   },
-
-
+  
+  
   /**
    * Attaches an element on which to listen for key events.
    * @param {Element|undefined} element The element to attach, or null/undefined
@@ -314,11 +298,23 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    *    component into.
    *
    * Overrides the default implementation of render_, defined at goog.ui.Component.prototype.render_
+   *
+   * Order of events:
+   *   render_()
+   *     preRender()
+   *     createDom()
+   *     insert element into document
+   *     enterDocument()
+   *       initializeDom()
+   *       renderChildren()
+   *     postRender()
    */
-  render_: function(opt_parentElement) {
+  render_: function(opt_parentElement, opt_beforeElement) {
     this.preRender();
     
     // render the root element
+    // calls createDom(); inserts element into document; calls enterDocument()
+    
     cmvc.ui.View.superClass_.render_.apply(this, arguments);
     
     this.postRender();
@@ -402,7 +398,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         child.enterDocument();
       }
     });
-
+    
     // register the child components that have a DOM node and are in the document.
     this.forEachChild(function(child) {
       if (child.isInDocument()) {
@@ -410,40 +406,54 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       }
     }, this);
     
-    // Initialize event handling if at least one state other than DISABLED is supported.
-    if (this.supportedStates_ & ~goog.ui.Component.State.DISABLED) {
-      // If the container is focusable, set up keyboard event handling.
-      if (this.isFocusable()) {
-        this.enableFocusHandling_(true);
-      }
+    // If the container is focusable, set up keyboard event handling.
+    this.enableFocusHandling_(this.isFocusable());
 
-      // Initialize mouse event handling if the view is configured to handle its own mouse events.
-      if (this.isHandleOwnMouseEvents()) {
-        this.enableMouseEventHandling_(true);
-      }
-      
-      // even though we could attach the view's event handlers to the view in the constructor, we don't want to
-      //   handle events unless the element_ is rendered.
-      this.attachDeclaredViewEventHandlers();
+    // Initialize mouse event handling if the view is configured to handle its own mouse events.
+    this.enableMouseEventHandling_(this.isHandleOwnMouseEvents());
+    
+    // even though we could attach the view's event handlers to the view in the constructor, we don't want to
+    //   handle events unless the element_ is rendered.
+    this.attachDeclaredViewEventHandlers();
 
-      // we only want to attach the DOM event handlers after the element_ is rendered
-      this.attachDeclaredDomEventHandlers();
-    }
+    // we only want to attach the DOM event handlers after the element_ is rendered
+    this.attachDeclaredDomEventHandlers();
+  },
+  
+  
+  getViewEvents: function() {
+    this.viewEvents_ = this.viewEvents_ || cmvc.inheritProperty(this, "viewEvents");
+    return this.viewEvents_;
+  },
+  
+  
+  getDomEvents: function() {
+    this.domEvents_ = this.domEvents_ || cmvc.inheritProperty(this, "domEvents");
+    return this.domEvents_;
   },
   
   
   /**
    * Iterate over all pairs of event/function_reference pairs in the event_handlers object, attaching
    * each function_reference as an event listener for the corresponding event.
+   * 
+   * Example:
+   * viewEvents: {
+   *   'click': function(e) { alert(); },
+   *   'mouseover': "myapp.application.mouseOverHandler",
+   *   'mouseout': 'mouseOutHandler',
+   *   'someOtherEvent': cmvc.ui.View.EventDispatch.Self
+   *   'anotherEvent': cmvc.ui.View.EventDispatch.Parent
+   * }
    */
   attachDeclaredViewEventHandlers: function(viewEvents) {
     var fn = null,
         context = null;
     
     // enable = goog.isDef(enable) ? enable : true;
-    viewEvents = viewEvents || this.viewEvents || {};
+    viewEvents = viewEvents || this.getViewEvents() || {};
     
-    goog.object.forEach(viewEvents, function(handler, evt, o) {
+    goog.object.forEach(viewEvents, function(handler, evt, o) {     // element, index, object
       switch(goog.typeOf(handler)) {
         case "function":    // the event handler is a function object that accepts a single event object argument
           fn = handler;
@@ -489,7 +499,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   attachDeclaredDomEventHandlers: function(domEvents) {
     var elem = this.getElement();
     
-    domEvents = domEvents || this.domEvents || [];
+    domEvents = domEvents || this.getDomEvents() || [];
     
     if(elem) {
       // create the initial event handlers
@@ -498,6 +508,31 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         this.getHandler().listen(elem, e, goog.partial(goog.events.dispatchEvent, this), false, this);
       }, this);
     }
+  },
+  
+  
+  /**
+   * Iterate over all pairs of local-property/remote-property pairs in the propertyBindings object, 
+   * binding each local property to a remote object's property.
+   */
+  attachDeclaredPropertyBindings: function(propertyBindings) {
+    var that = null,
+        thatProperty = null,
+        i = null;
+    
+    propertyBindings = propertyBindings || this.propertyBindings || {};
+    
+    goog.object.forEach(propertyBindings, function(thatPropertyPath, thisProperty, o) {
+      i = thatPropertyPath.lastIndexOf('.');
+      if(i > 0) {
+        // we found a "." in the string, so the text to the left of the "." is a reference to the context object, "that"
+        that = eval(thatPropertyPath.substring(0, i));
+        thatProperty = thatPropertyPath.substring(i + 1, thatPropertyPath.length);
+        // console.log(this, thisProperty, that, thatProperty);
+        // cmvc.kvo.bind(this, thisProperty, that, thatProperty);   // change in this -> change in that
+        cmvc.kvo.bind(that, thatProperty, this, thisProperty);      // change in that -> change in this
+      }
+    }, this);
   },
   
   
@@ -590,6 +625,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       this.keyHandler_.dispose();
       delete this.keyHandler_;
     }
+    
+    // remove all property observers
+    cmvc.kvo.removeObservers(this);
 
     this.childElementIdMap_ = null;
   },
@@ -597,16 +635,6 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
   /*********************************************************************************************/
   /*********************************** Default event handlers. *********************************/
-
-
-  /**
-   * This is the catch-all event handler.
-   */
-  /*
-  handleEvent: function(e) {
-    // do nothing
-  },
-  */
 
 
   /**
@@ -743,6 +771,14 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
         this.setActive(false);
       }
     }
+  },
+  
+  handleMouseOver: function(e) {
+    return true;
+  },
+  
+  handleMouseOut: function(e) {
+    return true;
   },
 
 
@@ -1063,6 +1099,30 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     //control.setHandleMouseEvents(true);
 
     return control;
+  },
+  
+  
+  // This function retrieves a goog.ui.Component object from the view hierarchy, starting with 'this' as the root.
+  // idea taken from SproutCore's View#getPath
+  getView: function(viewPath) {
+    var retval = this;      // return this if the viewPath is the empty string
+    var root = null,
+        child = null;
+    viewPath = goog.string.trim(viewPath);
+    if(viewPath.length > 0) {
+      root = viewPath.split('.', 1)[0];      // get the string before the first period: "a.b.c" -> "a"
+      child = this.getChild(root);
+      
+      // find the child view in the hierarchy of views
+      if(child) {
+        // recursively dig down and find the correct child view
+        retval = child.getView(viewPath.substr(root.length + 1));
+      } else {
+        // if the specified child view doesn't exist or there are no child_views, return null
+        retval = null;
+      }
+    }
+    return retval;
   },
 
 

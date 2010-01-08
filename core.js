@@ -1,5 +1,6 @@
 goog.provide("cmvc");
 
+goog.require("goog.array");
 goog.require("goog.object");
 
 /*
@@ -46,4 +47,78 @@ cmvc.extend = function(parentConstructor, prototypeMembers) {
   childConstructor.extend = goog.partial(cmvc.extend, childConstructor);
   
   return childConstructor;
+};
+
+/**
+ * Builds up an inherited property.
+ * 
+ * var C = cmvc.extend(Object, {
+ *   viewEvents: {a: 1, b: 2}
+ * });
+ * var D = C.extend({
+ *   viewEvents: {c: 3, d: 4}
+ * });
+ * var d = new D();
+ * var p = cmvc.inheritProperty(d, 'viewEvents');
+ * // At this point, p = {a: 1, b: 2, c: 3, d: 4}
+ * 
+ * Parameters:
+ * me - the object referenced by "this"
+ * property - the name of the property that we want to merge from all the ancestors in the class hierarchy of "me"
+ */
+cmvc.inheritProperty = function(me, property) {
+  var lastObj = me[property];
+  var stack = [lastObj];
+  var retval;
+  var obj;
+  var t;
+  
+  // Build a stack containing the objects referenced by "property" in the class hierarchy.
+  // The bottom of the stack contains the object referenced by me[property]
+  // The top of the stack contains the object referenced by oldestAncestorClass.prototype[property]
+  var klass = me.constructor;
+  while(klass.superClass_) {
+    t = klass.prototype[property];
+    if(lastObj !== t) {
+      stack.push(t);
+      lastObj = t;
+    }
+    klass = klass.superClass_.constructor;
+  }
+  
+  // Iterate over each element in the stack, merging each element with retval, in order from top to bottom of the stack.
+  retval = goog.cloneObject(stack.pop());
+  t = goog.typeOf(retval);
+  while(obj = stack.pop()) {    // <-- assignment (i.e. = ) is intended, not equality comparison (i.e. == )
+    if(t === goog.typeOf(obj)) {
+      switch(t) {
+        case "object":    // object/map/hash - merge objects
+          goog.object.extend(retval, obj);
+          break;
+        case "array":     // array - simply overwrite
+          retval = goog.cloneObject(obj);
+          break;
+        default:          // primitive - simply overwrite
+          retval = goog.cloneObject(obj);
+      }
+    } else {
+      retval = goog.cloneObject(obj);
+      t = goog.typeOf(retval);
+    }
+  }
+  
+  return retval;
+};
+
+/**
+ *  This implementation of construct found at:
+ *  http://groups.google.com/group/comp.lang.javascript/msg/ae35286efaf132f2
+ */
+cmvc.construct = function(constructorFn, args) {
+  args = args || [];
+  var createNewObject = "new constructorFn(" 
+    + goog.array.map(args, function(e, i, a) { return "args[" + i + "]"; }, this)
+    + ");"
+  //console.log(createNewObject);
+  return eval(createNewObject);
 };
