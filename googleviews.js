@@ -11,13 +11,14 @@ goog.require("goog.ui.Select");
 goog.require("goog.ui.MenuItem");
 
 goog.require("cmvc");
+goog.require("cmvc.events");
 goog.require("cmvc.ui.View");
+goog.require("cmvc.ui.View.EventDispatch");
+
 
 cmvc.ui.GoogleView = cmvc.ui.View.extend({
   constructor: function(opt_domHelper) {
     cmvc.ui.GoogleView.superClass_.constructor.apply(this, arguments);
-    
-    this.setFocusableChildrenAllowed(true);
   },
   
   getControl: function() {
@@ -47,16 +48,15 @@ cmvc.ui.GoogleView = cmvc.ui.View.extend({
    * root element that will simply fire the same event on the View object.
    */
   attachDeclaredDomEventHandlers: function(domEvents) {
-    domEvents = domEvents || this.getDomEvents() || [];
+    domEvents = domEvents || this.getDomEvents() || {};
     
     // create the initial event handlers
     if(this.googleComponent) {
-      goog.array.forEach(domEvents, function(e, i, a) {   // e is the event name (e.g. 'click')
-        goog.events.listen(this.googleComponent, e, goog.partial(goog.events.dispatchEvent, this), false, this);
-      }, this);
+      cmvc.events.attachEventHandlers(this.googleComponent, domEvents);
     }
   }
 });
+
 
 cmvc.ui.GoogleSelect = cmvc.ui.GoogleView.extend({
   root: { tag: 'span', id: '{id}' },
@@ -65,7 +65,7 @@ cmvc.ui.GoogleSelect = cmvc.ui.GoogleView.extend({
   googleComponentClass: goog.ui.Select,
   //googleComponentArgs: [arg1, arg2, arg3, ..., argN],
   
-  domEvents: [goog.ui.Component.EventType.ACTION],
+  domEvents: {'action': cmvc.ui.View.EventDispatch.Self },
   
   constructor: function(opt_domHelper, store) {
     cmvc.ui.GoogleSelect.superClass_.constructor.apply(this, arguments);
@@ -87,10 +87,11 @@ cmvc.ui.GoogleSelect = cmvc.ui.GoogleView.extend({
   }
 });
 
+
 cmvc.ui.GoogleButton = cmvc.ui.GoogleView.extend({
   root: { tag: 'span', id: '{id}' },
   
   googleComponentClass: goog.ui.CustomButton,
   
-  domEvents: [goog.ui.Component.EventType.ACTION]
+  domEvents: { 'action': cmvc.ui.View.EventDispatch.Self }
 });

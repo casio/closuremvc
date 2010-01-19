@@ -7,6 +7,8 @@ goog.require("goog.object");
 
 goog.require("cmvc");
 goog.require("cmvc.ui.View");
+goog.require("cmvc.ui.View.EventDispatch");
+
 
 cmvc.ui.ExtView = cmvc.ui.View.extend({
   defaultExtComponentConfig: { },
@@ -45,18 +47,17 @@ cmvc.ui.ExtView = cmvc.ui.View.extend({
    * root element that will simply fire the same event on the View object.
    */
   attachDeclaredDomEventHandlers: function(domEvents) {
-    domEvents = domEvents || this.getDomEvents() || [];
+    domEvents = domEvents || this.getDomEvents() || {};
     
     // create the initial event handlers
     if(this.extComponent) {
-      goog.array.forEach(domEvents, function(e, i, a) {   // e is the event name (e.g. 'click')
-        this.extComponent.on(e, function(extEventObject, t) {
-          goog.events.dispatchEvent(this, extEventObject);
-        }, this);
+      goog.object.forEach(domEvents, function(handler, evt, obj) {
+        this.extComponent.on(evt, handler, this);
       }, this);
     }
   }
 });
+
 
 cmvc.ui.ExtButtonView = cmvc.ui.ExtView.extend({
   root: { tag: 'span', id: "{id}" },
@@ -73,6 +74,7 @@ cmvc.ui.ExtButtonView = cmvc.ui.ExtView.extend({
     this.extComponentConfig.text = this.text || this.extComponentConfig.text || "Click Here";
   }
 });
+
 
 cmvc.ui.ExtSelectView = cmvc.ui.ExtView.extend({
   root: { tag: 'span', id: "{id}" },
