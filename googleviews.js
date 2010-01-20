@@ -52,7 +52,7 @@ cmvc.ui.GoogleView = cmvc.ui.View.extend({
     
     // create the initial event handlers
     if(this.googleComponent) {
-      cmvc.events.attachEventHandlers(this.googleComponent, domEvents);
+      cmvc.events.attachEventHandlers(this.googleComponent, domEvents, this);
     }
   }
 });
@@ -65,7 +65,7 @@ cmvc.ui.GoogleSelect = cmvc.ui.GoogleView.extend({
   googleComponentClass: goog.ui.Select,
   //googleComponentArgs: [arg1, arg2, arg3, ..., argN],
   
-  domEvents: {'action': cmvc.ui.View.EventDispatch.Self },
+  domEvents: { 'action': 'this.dispatchEvent' },
   
   constructor: function(opt_domHelper, store) {
     cmvc.ui.GoogleSelect.superClass_.constructor.apply(this, arguments);
@@ -93,5 +93,5 @@ cmvc.ui.GoogleButton = cmvc.ui.GoogleView.extend({
   
   googleComponentClass: goog.ui.CustomButton,
   
-  domEvents: { 'action': cmvc.ui.View.EventDispatch.Self }
+  domEvents: { 'action': 'this.dispatchEvent' }
 });

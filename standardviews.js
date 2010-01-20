@@ -4,6 +4,11 @@ goog.provide("cmvc.ui.InlineTextInputCursorView");
 goog.provide("cmvc.ui.InlineTextInputView");
 goog.provide("cmvc.ui.TextboxView");
 
+goog.require("goog.dom");
+goog.require("goog.dom.classes");
+goog.require("goog.ui.Component");
+goog.require("goog.ui.Component.EventType");
+
 goog.require("cmvc");
 goog.require("cmvc.Template");
 goog.require("cmvc.ui.View");
@@ -12,7 +17,7 @@ goog.require("cmvc.ui.View.EventDispatch");
 
 cmvc.ui.LabelView = cmvc.ui.View.extend({
   text: "",
-  root: { tag: 'span', html: '{_content}', id: '{id}' },
+  root: { tag: 'span', html: '{content_}', id: '{id}' },
   
   constructor: function(opt_orientation, opt_renderer, opt_domHelper) {
     cmvc.ui.LabelView.superClass_.constructor.apply(this, arguments);
@@ -21,7 +26,7 @@ cmvc.ui.LabelView = cmvc.ui.View.extend({
   applyTextTemplate: function() {
     // Use this.text as the template string
     this.textTemplate = new cmvc.Template(this.text || "");
-    this._content = this.textTemplate.applyTemplate(this);
+    this.content_ = this.textTemplate.applyTemplate(this);
   },
   
   preRender: function() {
@@ -30,7 +35,7 @@ cmvc.ui.LabelView = cmvc.ui.View.extend({
   
   updateText: function() {
     this.applyTextTemplate();
-    this.getElement().innerHTML = this._content;
+    this.getElement().innerHTML = this.content_;
   },
   
   handlePropertySet: function(property, index, value) {
@@ -42,13 +47,63 @@ cmvc.ui.LabelView = cmvc.ui.View.extend({
 
 
 cmvc.ui.ButtonView = cmvc.ui.LabelView.extend({
-  root: { tag: 'a', href: 'javascript:void(null);', html: '{_content}' },
-  domEvents: { 'click': cmvc.ui.View.EventDispatch.Self },
+  root: { tag: 'a', href: 'javascript:void(null);', html: '{content_}' },
+  
+  domEvents: {
+    'click': 'this.dispatchEvent',
+    'mouseover': 'this.handleMouseOver',
+    'mouseout': 'this.handleMouseOut'
+  },
+  
+  viewEvents: {
+    'enter': 'this.handleEnter',
+    'leave': 'this.handleLeave'
+  },
   
   focusable_: true,
+  hoverClass: null,
+  activeClass: null,
   
   constructor: function(opt_orientation, opt_renderer, opt_domHelper) {
     cmvc.ui.ButtonView.superClass_.constructor.apply(this, arguments);
+  },
+  
+  /**
+   * Handles mouseover events. Dispatches an ENTER event;
+   * Considered protected; should only be used within this package and by subclasses.
+   * @param {goog.events.BrowserEvent} e Mouse event to handle.
+   */
+  handleMouseOver: function(e) {
+    // Ignore mouse moves between descendants.
+    if (e.relatedTarget && !goog.dom.contains(this.getElement(), e.relatedTarget)) {
+      this.dispatchEvent(goog.ui.Component.EventType.ENTER);
+    }
+  },
+  
+  /**
+   * Handles mouseout events. Dispatches a LEAVE event;
+   * Considered protected; should only be used within this package and by subclasses.
+   * @param {goog.events.BrowserEvent} e Mouse event to handle.
+   */
+  handleMouseOut: function(e) {
+    // Ignore mouse moves between descendants.
+    if (e.relatedTarget && !goog.dom.contains(this.getElement(), e.relatedTarget)) {
+      this.dispatchEvent(goog.ui.Component.EventType.LEAVE);
+    }
+  },
+  
+  handleEnter: function(e) {
+    console.log("handleEnter");
+    if(this.hoverClass) {
+      goog.dom.classes.enable(this.getElement(), this.hoverClass, true);
+    }
+  },
+  
+  handleLeave: function(e) {
+    console.log("handleLeave");
+    if(this.hoverClass) {
+      goog.dom.classes.enable(this.getElement(), this.hoverClass, false);
+    }
   }
 });
 
@@ -238,5 +293,7 @@ cmvc.ui.InlineTextInputView = cmvc.ui.View.extend({
 });
 
 cmvc.ui.TextboxView = cmvc.ui.View.extend({
-  root: { tag: 'input', type: 'text', id: '{id}' }
+  root: { tag: 'input', type: 'text', id: '{id}' },
+  
+  focusable_: true
 });

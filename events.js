@@ -6,28 +6,64 @@ goog.require("goog.events");
 goog.require("cmvc.ui.View.EventDispatch");
 
 /**
- * Iterate over all pairs of event/function_reference pairs in the event_handlers object, attaching
- * each function_reference as an event listener for the corresponding event.
- *
- * IMPORTANT NOTE: Events with a handler of cmvc.ui.View.EventDispatch.Self/Parent/Child have additional requirements:
- *   If using cmvc.ui.View.EventDispatch.Self, thatObj.dispatchEvent() must be defined.
- *   If using cmvc.ui.View.EventDispatch.Parent, thatObj.getParent() and thatObj.dispatchEvent() must be defined.
- *   If using cmvc.ui.View.EventDispatch.Child, thatObj.dispatchEventToChild() must be defined.
+ * Iterate over all pairs of event/function_reference and event/array_of_function_references pairs 
+ * in the event_handlers object, attaching each function_reference as an event listener for the corresponding event.
+ * 
+ * IMPORTANT NOTE: Events with a handler of cmvc.ui.View.EventDispatch.Parent/Child have additional requirements:
+ *   If using cmvc.ui.View.EventDispatch.Parent, eventTarget.getParent() and thatObj.dispatchEvent() must be defined.
+ *   If using cmvc.ui.View.EventDispatch.Child, eventTarget.dispatchEventToChild() must be defined.
+ * 
+ * @param {Function} attachListenerFn should have a function signature of:
+ *   function(src, type, listener, opt_capt, opt_handler) -> {?number}
+ *   where:
+ *     @param {EventTarget|goog.events.EventTarget} src The node to listen to
+ *       events on.
+ *     @param {string|Array.<string>} type Event type or array of event types.
+ *     @param {Function|Object} listener Callback method, or an object with a
+ *       handleEvent function.
+ *     @param {boolean=} opt_capt Whether to fire in capture phase (defaults to
+ *       false).
+ *     @param {Object=} opt_handler Element in whose scope to call the listener.
+ *     @return {?number} Unique key for the listener.
+ * 
+ * Usage:
+ *   2 arguments: cmvc.events.attachEventHandlers(eventTarget, events);
+ *   3 argumnets: cmvc.events.attachEventHandlers(eventTarget, events, opt_context);
+ *   4 arguments: cmvc.events.attachEventHandlers(eventTarget, events, opt_capture, opt_context);
+ *   5 arguments: cmvc.events.attachEventHandlers(eventTarget, events, opt_capture, attachListenerFn, opt_context);
+ *   6 arguments: cmvc.events.attachEventHandlers(eventTarget, events, opt_capture, attachListenerFn, attachListenerFnContext, opt_context);
  * 
  * Example:
- * cmvc.events.attachEventHandlers(thatObj, {
- *   'click': function(e) { alert(); },
- *   'mouseover': "myapp.application.mouseOverHandler",
- *   'mouseout': 'mouseOutHandler',
- *   'someOtherEvent': cmvc.ui.View.EventDispatch.Self,
- *   'anotherEvent': cmvc.ui.View.EventDispatch.Parent,
- *   'yetAnotherEvent': cmvc.ui.View.EventDispatch.Child
- * });
+ *   cmvc.events.attachEventHandlers(thatObj, {
+ *     'click': function(e) { alert(); },
+ *     'mouseover': "myapp.application.mouseOverHandler",
+ *     'mouseout': 'mouseOutHandler',
+ *     'someOtherEvent': 'this.dispatchEvent',
+ *     'anotherEvent': cmvc.ui.View.EventDispatch.Parent,
+ *     'yetAnotherEvent': cmvc.ui.View.EventDispatch.Child,
+ *     'enter': [function(e) { alert('Welcome!'); },
+ *               function(e) { alert('... and enter!'); } ]
+ *   });
  */
-cmvc.events.attachEventHandlers = function(eventTarget, events) {
+cmvc.events.attachEventHandlers = function(eventTarget, events, opt_capture, attachListenerFn, attachListenerFnContext, opt_context) {
+  if (arguments.length == 3) {
+    opt_context = opt_capture;
+    opt_capture = undefined;
+  } else if (arguments.length == 4) {
+    opt_context = attachListenerFn;
+    attachListenerFn = undefined;
+  } else if (arguments.length == 5) {
+    opt_context = attachListenerFnContext;
+    attachListenerFnContext = undefined;
+  }
+  
   var fn = null,
       context = null,
       hasGetHandlerMethod = goog.isFunction(eventTarget.getHandler);
+      
+  opt_capture = opt_capture || false;
+  attachListenerFn = attachListenerFn || (hasGetHandlerMethod ? eventTarget.getHandler().listen : goog.events.listen);
+  attachListenerFnContext = attachListenerFnContext || (hasGetHandlerMethod ? eventTarget.getHandler() : opt_context);
   
   goog.object.forEach(events, function(handler, evt, o) {     // element, index, object
     switch(goog.typeOf(handler)) {
@@ -49,11 +85,6 @@ cmvc.events.attachEventHandlers = function(eventTarget, events) {
         break;
       case "number":      // the event handler is a reference to a specific built-in behavior
         switch(handler) {
-          case cmvc.ui.View.EventDispatch.Self:
-            context = eventTarget;
-            fn = context.dispatchEvent;     // the context object (a goog.ui.Component) ought to have a dispatchEvent() method
-            break;
-            
           case cmvc.ui.View.EventDispatch.Parent:
             context = eventTarget.getParent();
             fn = context.dispatchEvent;     // the context object (a goog.ui.Component) ought to have a dispatchEvent() method
@@ -72,10 +103,7 @@ cmvc.events.attachEventHandlers = function(eventTarget, events) {
         throw Error("Unable to attach event handler to the view. Unknown event handler type.");
     }
     
-    if(hasGetHandlerMethod) {
-      eventTarget.getHandler().listen(eventTarget, evt, fn, false, context);
-    } else {
-      goog.events.listen(eventTarget, evt, fn, false, context);
-    }
-  });
+    // attachListenerFn.call(thisObj, src, type, listener, opt_capt, opt_handler);
+    attachListenerFn.call(attachListenerFnContext, eventTarget, evt, fn, opt_capture, context);
+  }, opt_context);
 };

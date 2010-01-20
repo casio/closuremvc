@@ -414,7 +414,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   attachDeclaredViewEventHandlers: function(viewEvents) {
     viewEvents = viewEvents || this.getViewEvents() || {};
     
-    cmvc.events.attachEventHandlers(this, viewEvents);
+    cmvc.events.attachEventHandlers(this, viewEvents, this);
   },
   
   
@@ -428,19 +428,19 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     domEvents = domEvents || this.getDomEvents() || {};
     
     if(elem) {
-      cmvc.events.attachEventHandlers(elem, domEvents);
+      cmvc.events.attachEventHandlers(elem, domEvents, this);
     }
   },
   
   
   getViewEvents: function() {
-    this.viewEvents_ = this.viewEvents_ || cmvc.inheritProperty(this, "viewEvents");
+    this.viewEvents_ = this.viewEvents_ || cmvc.inheritProperty(this, "viewEvents", 3);
     return this.viewEvents_;
   },
   
   
   getDomEvents: function() {
-    this.domEvents_ = this.domEvents_ || cmvc.inheritProperty(this, "domEvents");
+    this.domEvents_ = this.domEvents_ || cmvc.inheritProperty(this, "domEvents", 3);
     return this.domEvents_;
   },
   
@@ -897,8 +897,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   
   
   /**
-   * Enables or disables the tab index of the element.  Only elements with a
-   * valid tab index can receive focus.
+   * Enables or disables the tab index of the element.  Only elements with a valid tab index can receive focus.
    * @param {Element} element Element whose tab index is to be changed.
    * @param {boolean} enable Whether to add or remove the element's tab index.
    */
@@ -933,9 +932,8 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   }
 });
 
-// Define two constants on the View "class"
+
 cmvc.ui.View.EventDispatch = {
-  Self: 1,
-  Parent: 2,
-  Child: 3
+  Parent: 1,
+  Child: 2
 };

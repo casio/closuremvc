@@ -3,6 +3,8 @@ goog.provide("cmvc");
 goog.require("goog.array");
 goog.require("goog.object");
 
+goog.require("cmvc.object");
+
 /*
  *  Function signature:
  *    1. extend(klass, prototypeMembers)
@@ -49,6 +51,68 @@ cmvc.extend = function(parentConstructor, prototypeMembers) {
   return childConstructor;
 };
 
+
+/**
+ * Given an object and and callback function, this function performs an ancestor-to-child traversal
+ * of the "class"/prototype hierarchy. At each level in the hierarchy the callbackFn function is invoked with a single
+ * argument: the prototype at the level currently being visited.
+ */
+cmvc.traversePrototypeTree = function(child, callbackFn, contextObj) {
+  // if child has a superClass_ property, then it is a constructor function (a "class"), otherwise it is an instance of a "class" (an object)
+  var klass = child.superClass_ ? child : child.constructor;
+  
+  var lastPrototype = klass.prototype,
+      stack = [lastPrototype],
+      t;
+  
+  // Build a stack containing the prototype objects that make up the prototype hierarchy
+  // The bottom of the stack contains the "youngest" prototype
+  // The top of the stack contains the "oldest" ancestor prototype
+  while(klass.superClass_) {
+    t = klass.superClass_;
+    if (t !== lastPrototype) {
+      stack.push(t);
+      lastPrototype = t;
+    }
+    klass = t.constructor;
+  }
+  
+  // Iterate over each element in the stack, visiting each prototype in order from top to bottom of the stack.
+  while(t = stack.pop()) {    // <-- assignment (i.e. = ) is intended, not equality comparison (i.e. == )
+    callbackFn.call(contextObj, t);
+  }
+};
+
+
+/**
+ * Traverse the property hierarchy in order of oldest ancestor property to child property.
+ *
+ * @param {Function} callbackFn should have one argument: the object mapped to
+ *                              the property (i.e. the property name stored in the 'property' argument)
+ */
+cmvc.traverseUniquePropertyTree = function(childObj, property, callbackFn, contextObj) {
+  var lastObj, currObj;
+  cmvc.traversePrototypeTree(childObj, function(proto) {
+    currObj = proto[property];
+    if (currObj !== lastObj) {
+      callbackFn.call(contextObj, currObj);
+      lastObj = currObj;
+    }
+  });
+};
+
+
+cmvc.buildPropertyHistory = function(childObj, property) {
+  var history = [];     // ordered from oldest ancestor property to child property
+  
+  cmvc.traverseUniquePropertyTree(childObj, property, function(obj) {
+    history.push(obj);
+  });
+  
+  return history;
+};
+
+
 /**
  * Builds up an inherited property.
  * 
@@ -63,52 +127,50 @@ cmvc.extend = function(parentConstructor, prototypeMembers) {
  * // At this point, p = {a: 1, b: 2, c: 3, d: 4}
  * 
  * Parameters:
- * me - the object referenced by "this"
- * property - the name of the property that we want to merge from all the ancestors in the class hierarchy of "me"
+ * @param {Function|object} me - the object referenced by "this"
+ * @param {String} property - the name of the property that we want to merge from all the ancestors in the class hierarchy of "me"
+ * @param {Numeric} mode is 1 to indicate overwrite mode, 2 to indicate merge mode, and 3 to indicate append mode
  */
-cmvc.inheritProperty = function(me, property) {
-  var lastObj = me[property];
-  var stack = [lastObj];
+cmvc.inheritProperty = function(me, property, mode) {
   var retval;
-  var obj;
-  var t;
+  var propHistory = cmvc.buildPropertyHistory(me, property);
+  var t = goog.typeOf(retval);
   
-  // Build a stack containing the objects referenced by "property" in the class hierarchy.
-  // The bottom of the stack contains the object referenced by me[property]
-  // The top of the stack contains the object referenced by oldestAncestorClass.prototype[property]
-  var klass = me.constructor;
-  while(klass.superClass_) {
-    t = klass.prototype[property];
-    if(lastObj !== t) {
-      stack.push(t);
-      lastObj = t;
-    }
-    klass = klass.superClass_.constructor;
-  }
+  mode = mode || 2;
   
-  // Iterate over each element in the stack, merging each element with retval, in order from top to bottom of the stack.
-  retval = goog.cloneObject(stack.pop());
-  t = goog.typeOf(retval);
-  while(obj = stack.pop()) {    // <-- assignment (i.e. = ) is intended, not equality comparison (i.e. == )
-    if(t === goog.typeOf(obj)) {
+  goog.array.forEach(propHistory, function(e, i, a) {
+    if (t === goog.typeOf(e)) {
       switch(t) {
-        case "object":    // object/map/hash - merge objects
-          goog.object.extend(retval, obj);
+        case "object":              // object/map/hash
+          if (mode == 1) {          // overwrite
+            retval = goog.cloneObject(e);
+          } else if (mode == 2) {   // merge - some key/value overwrites may occur
+            goog.object.extend(retval, e);
+          } else if (mode == 3) {   // append - no key/value overwrites will occur
+            cmvc.object.append(retval, e);
+          }
           break;
-        case "array":     // array - simply overwrite
-          retval = goog.cloneObject(obj);
+        case "array":               // array
+          if (mode == 1) {          // overwrite
+            retval = goog.cloneObject(e);
+          } else if (mode == 2) {   // merge
+            retval = retval.concat(e);      // TODO: want to change this so that some overwrites may occur?
+          } else if (mode == 3) {   // append
+            retval = retval.concat(e);
+          }
           break;
-        default:          // primitive - simply overwrite
-          retval = goog.cloneObject(obj);
+        default:                // primitive - simply overwrite in every case
+          retval = goog.cloneObject(e);
       }
     } else {
-      retval = goog.cloneObject(obj);
+      retval = goog.cloneObject(e);
       t = goog.typeOf(retval);
     }
-  }
-  
+  });
+
   return retval;
 };
+
 
 /**
  *  This implementation of construct found at:
