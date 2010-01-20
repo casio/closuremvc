@@ -1,5 +1,6 @@
 goog.provide("cmvc.events");
 
+goog.require("goog.array");
 goog.require("goog.object");
 goog.require("goog.events");
 
@@ -65,45 +66,53 @@ cmvc.events.attachEventHandlers = function(eventTarget, events, opt_capture, att
   attachListenerFn = attachListenerFn || (hasGetHandlerMethod ? eventTarget.getHandler().listen : goog.events.listen);
   attachListenerFnContext = attachListenerFnContext || (hasGetHandlerMethod ? eventTarget.getHandler() : opt_context);
   
-  goog.object.forEach(events, function(handler, evt, o) {     // element, index, object
-    switch(goog.typeOf(handler)) {
-      case "function":    // the event handler is a function object that accepts a single event object argument
-        fn = handler;
-        context = eventTarget;
-        break;
-      case "string":      // the event handler is a "dotted" reference to a user defined function
-        var i = handler.lastIndexOf('.');
-        if(i >= 0) {
-          // we found a "." in the string, so the text to the left of the "." is a reference to the context object
-          context = eval(handler.substring(0, i));
-          fn = eval(handler);
-        } else {
-          // we didn't find any "." in the string, so eventTarget is the context object
-          context = eventTarget;
-          fn = context[handler];
-        }
-        break;
-      case "number":      // the event handler is a reference to a specific built-in behavior
-        switch(handler) {
-          case cmvc.ui.View.EventDispatch.Parent:
-            context = eventTarget.getParent();
-            fn = context.dispatchEvent;     // the context object (a goog.ui.Component) ought to have a dispatchEvent() method
-            break;
-          
-          case cmvc.ui.View.EventDispatch.Child:
-            context = eventTarget;
-            fn = context.dispatchEventToChild;
-            break;
-            
-          default:
-            throw Error("Unable to attach event handler to the view. Unknown event handler reference.");
-        }
-        break;
-      default:
-        throw Error("Unable to attach event handler to the view. Unknown event handler type.");
+  goog.object.forEach(events, function(handlerOrHandlerArray, evt, o) {     // element, index, object
+    if (!goog.isArray(handlerOrHandlerArray)) {
+      handlerOrHandlerArray = [handlerOrHandlerArray];
     }
+    // now handlerOrHandlerArray is an array of event handlers for the event referenced by evt
     
-    // attachListenerFn.call(thisObj, src, type, listener, opt_capt, opt_handler);
-    attachListenerFn.call(attachListenerFnContext, eventTarget, evt, fn, opt_capture, context);
+    // iterate over each event handler stored in handlerOrHandlerArray
+    goog.array.forEach(handlerOrHandlerArray, function(handler, j, a) {     // element, index, array
+      switch(goog.typeOf(handler)) {
+        case "function":    // the event handler is a function object that accepts a single event object argument
+          fn = handler;
+          context = eventTarget;
+          break;
+        case "string":      // the event handler is a "dotted" reference to a user defined function
+          var i = handler.lastIndexOf('.');
+          if(i >= 0) {
+            // we found a "." in the string, so the text to the left of the "." is a reference to the context object
+            context = eval(handler.substring(0, i));
+            fn = eval(handler);
+          } else {
+            // we didn't find any "." in the string, so eventTarget is the context object
+            context = eventTarget;
+            fn = context[handler];
+          }
+          break;
+        case "number":      // the event handler is a reference to a specific built-in behavior
+          switch(handler) {
+            case cmvc.ui.View.EventDispatch.Parent:
+              context = eventTarget.getParent();
+              fn = context.dispatchEvent;     // the context object (a goog.ui.Component) ought to have a dispatchEvent() method
+              break;
+
+            case cmvc.ui.View.EventDispatch.Child:
+              context = eventTarget;
+              fn = context.dispatchEventToChild;
+              break;
+
+            default:
+              throw Error("Unable to attach event handler to the view. Unknown event handler reference.");
+          }
+          break;
+        default:
+          throw Error("Unable to attach event handler to the view. Unknown event handler type.");
+      }
+
+      // attachListenerFn.call(thisObj, src, type, listener, opt_capt, opt_handler);
+      attachListenerFn.call(attachListenerFnContext, eventTarget, evt, fn, opt_capture, context);
+    }, this);
   }, opt_context);
 };
