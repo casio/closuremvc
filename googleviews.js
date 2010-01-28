@@ -58,8 +58,18 @@ cmvc.ui.GoogleView = cmvc.ui.View.extend({
 });
 
 
+cmvc.ui.GoogleButton = cmvc.ui.GoogleView.extend({
+  root: { tag: 'span', id: '{id}' },
+  
+  googleComponentClass: goog.ui.CustomButton,
+  
+  domEvents: { 'action': 'this.dispatchEvent' }
+});
+
+
 cmvc.ui.GoogleSelect = cmvc.ui.GoogleView.extend({
   root: { tag: 'span', id: '{id}' },
+  
   store: [],
   
   googleComponentClass: goog.ui.Select,
@@ -85,13 +95,4 @@ cmvc.ui.GoogleSelect = cmvc.ui.GoogleView.extend({
       this.googleComponent.addItem(new goog.ui.MenuItem(e[2]));
     }, this);
   }
-});
-
-
-cmvc.ui.GoogleButton = cmvc.ui.GoogleView.extend({
-  root: { tag: 'span', id: '{id}' },
-  
-  googleComponentClass: goog.ui.CustomButton,
-  
-  domEvents: { 'action': 'this.dispatchEvent' }
 });

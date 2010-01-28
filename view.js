@@ -74,16 +74,29 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     if(goog.isDefAndNotNull(config)) {
       goog.object.extend(this, config);
     }
-
+    
     // enumerate the child views declared in this.children and add each as a child view of this view (the parent/root)
     if(this.children) {
       var view = null;
-      goog.array.forEach(cmvc.string.words(this.children), function(e, i, a) {
+      goog.array.forEach(cmvc.string.words(this.children), function(childViewName, i, a) {
         // add child views (view objects) but do not render them yet because if we render the child view now, we
         //   are forced to create the DOM node for this view (the parent of the children) before we're ready.
         //   We only want to create the DOM node for this view when we call render().
-        view = new (this[e])(opt_domHelper);
-        view.setId(e);
+        
+        // If the object mapped to by the child view name is a Function, we assume it is a constructor function 
+        //   that we should invoke to create a new object of that type.
+        // Otherwise, if the child view name maps to a non-Function object, then we assume that the object is a
+        //   cmvc.ui.View instance already, and just add it as a child.
+        if (goog.isFunction(this[childViewName])) {
+          view = new (this[childViewName])(this[childViewName + "Config"], opt_domHelper);
+        } else {
+          view = this[childViewName];
+        }
+        
+        if(!view.id_) {             // if an ID hasn't already been set, then set one.
+          view.setId(childViewName);
+        }
+        
         this.addChild(view, false);
       }, this);
     }
@@ -112,7 +125,14 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
    */
   viewEvents: {},
   
-  domEvents: {},
+  
+  domEvents: {
+    'mouseover': 'this.handleMouseOver',    // this is so we fire enter events
+    'mouseout': 'this.handleMouseOut'       // this is so we fire leave events
+  },
+  
+  
+  keyEvents: {},
   
   
   // The following fields are taken from goog.ui.Container
@@ -286,7 +306,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
       var element = this.getElement();
       // render any child views that haven't been rendered yet
       this.forEachChild(function(child, i) {
-        if (!child.isInDocument() && !child.getElement()) {
+        if (!child.isInDocument()) {
           child.render(element);
         }
       }, this);
@@ -377,6 +397,9 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     
     // we only want to attach the DOM event handlers after the element_ is rendered
     this.attachDeclaredDomEventHandlers();
+    
+    // we only want to attach the key event handlers to the goog.evengs.KeyHandler object after the element_ is rendered
+    this.attachDeclaredKeyEventHandlers();
   },
   
   
@@ -433,6 +456,21 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   },
   
   
+  /**
+   * Iterate over the events referenced in the keyEvents map and for each event/handler 
+   * pair attach an event handler to this view's KeyHandler object.
+   * NOTE: There should only be a single event/handler pair:
+   *       1. goog.events.KeyHandler.EventType.KEY/[handler1, handler2, ...]
+   *       2. goog.events.KeyHandler.EventType.KEY/handler
+   * Note also that goog.events.KeyHandler.EventType.KEY = 'key'
+   */
+  attachDeclaredKeyEventHandlers: function(keyEvents) {
+    keyEvents = keyEvents || this.getKeyEvents() || {};
+    
+    cmvc.events.attachEventHandlers(this.getKeyHandler(), keyEvents, this);
+  },
+  
+  
   getViewEvents: function() {
     this.viewEvents_ = this.viewEvents_ || cmvc.inheritProperty(this, "viewEvents", 3);
     return this.viewEvents_;
@@ -442,6 +480,12 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   getDomEvents: function() {
     this.domEvents_ = this.domEvents_ || cmvc.inheritProperty(this, "domEvents", 3);
     return this.domEvents_;
+  },
+  
+  
+  getKeyEvents: function() {
+    this.keyEvents_ = this.keyEvents_ || cmvc.inheritProperty(this, "keyEvents", 3);
+    return this.keyEvents_;
   },
   
   
@@ -530,7 +574,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   /** @inheritDoc */
   disposeInternal: function() {
     cmvc.ui.View.superClass_.disposeInternal.call(this);
-
+    
     // completely dispose of the key handler ; Taken from goog.ui.Control/goog.ui.Container
     if (this.keyHandler_) {
       this.keyHandler_.detach();
@@ -540,7 +584,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
     
     // remove all property observers
     cmvc.kvo.removeObservers(this);
-
+    
     // taken from goog.ui.Container
     this.childElementIdMap_ = null;
   },
@@ -551,8 +595,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Handles focus events raised when the container's key event target receives
-   * keyboard focus.
+   * Handles focus events raised when the container's key event target receives keyboard focus.
    * @param {goog.events.BrowserEvent} e Focus event to handle.
    */
   handleFocus: function(e) {
@@ -561,8 +604,7 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
 
 
   /**
-   * Handles blur events raised when the container's key event target loses
-   * keyboard focus.
+   * Handles blur events raised when the container's key event target loses keyboard focus.
    * @param {goog.events.BrowserEvent} e Blur event to handle.
    */
   handleBlur: function(e) {
@@ -613,6 +655,38 @@ cmvc.ui.View = cmvc.extend(goog.ui.Component, {
   },
 
 
+  /**
+   * Handles mouseover events. Dispatches an ENTER event;
+   * Considered protected; should only be used within this package and by subclasses.
+   * @param {goog.events.BrowserEvent} e Mouse event to handle.
+   */
+  handleMouseOver: function(e) {
+    // Ignore mouse moves between descendants.
+    // From the event.relatedTarget documentation from Mozilla MDC found at
+    //   https://developer.mozilla.org/en/DOM/event.relatedTarget:
+    //   For the mouseover event this property (event.relatedTarget) indicates the EventTarget which the pointing device exited.
+    // If the mouse just exited a non-descendent of this.element_, as it entered this element, then fire the ENTER event.
+    if (e.relatedTarget && !goog.dom.contains(this.element_, e.relatedTarget)) {
+      this.dispatchEvent(goog.ui.Component.EventType.ENTER);
+    }
+  },
+  
+  
+  /**
+   * Handles mouseout events. Dispatches a LEAVE event;
+   * Considered protected; should only be used within this package and by subclasses.
+   * @param {goog.events.BrowserEvent} e Mouse event to handle.
+   */
+  handleMouseOut: function(e) {
+    // Ignore mouse moves between descendants.
+    // For the mouseout event this property (event.relatedTarget) indicates the EventTarget which the pointing device entered.
+    // If the mouse just entered a non-descendant of this.element_, as it exited this element, then fire the LEAVE event.
+    if (e.relatedTarget && !goog.dom.contains(this.element_, e.relatedTarget)) {
+      this.dispatchEvent(goog.ui.Component.EventType.LEAVE);
+    }
+  },
+  
+  
   /*********************************************************************************************/
   /********************************* Child component management. *******************************/
 

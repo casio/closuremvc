@@ -1,0 +1,33 @@
+closuremvc is a small mvc framework built upon Google's "Closure":http://code.google.com/closure/library/ JavaScript library.
+
+The intent is to be lightweight and easy to read and understand. closuremvc will not be a bloated framework.
+
+In its current form closuremvc is usable but in no way feature complete. As of 1/28/2010 a more appropriate name might be closurevc, as there is no "model" piece yet.
+
+closuremvc provides a way to declaratively or non-declaratively build user interfaces.
+
+This example shows how to declaratively build a simple user interface:
+
+bc.. myapp.views.SimplePage = cmvc.ui.View.extend({
+  root: { tag: 'div', id: "simplePage" },
+  children: "sectionA sectionB sectionC",
+  
+  sectionA: cmvc.ui.View.extend({
+    root: { tag: 'div', id: "firstSection", html: "This is text in sectionA." }
+  }),
+
+  sectionB: cmvc.ui.View.extend({
+    root: { tag: 'div', id: "secondSection", html: "This is text in sectionB." }
+  }),
+
+  sectionC: cmvc.ui.View.extend({
+    root: { tag: 'div', id: "thirdSection", html: "This is text in sectionC." }
+  })
+});
+
+p. Then, to render the view (myapp.views.SimplePage), you'd say:
+
+bc.. var myPage = new myapp.views.SimplePage();
+myPage.render(document.body);
+
+p. More to come later...

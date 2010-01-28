@@ -129,7 +129,7 @@ cmvc.buildPropertyHistory = function(childObj, property) {
  * Parameters:
  * @param {Function|object} me - the object referenced by "this"
  * @param {String} property - the name of the property that we want to merge from all the ancestors in the class hierarchy of "me"
- * @param {Numeric} mode is 1 to indicate overwrite mode, 2 to indicate merge mode, and 3 to indicate append mode
+ * @param {Numeric} mode is 1 to indicate overwrite mode, 2 to indicate merge mode, and 3 to indicate append mode; defaults to 2.
  */
 cmvc.inheritProperty = function(me, property, mode) {
   var retval;
@@ -184,3 +184,11 @@ cmvc.construct = function(constructorFn, args) {
   //console.log(createNewObject);
   return eval(createNewObject);
 };
+
+
+/**
+ * This is a convenience function that simply calls goog.ui.IdGenerator.getInstance().getNextUniqueId().
+ */
+cmvc.getId = function() {
+  return goog.ui.IdGenerator.getInstance().getNextUniqueId();
+}
