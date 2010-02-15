@@ -154,7 +154,6 @@ cmvc.Template = cmvc.extend(Object, {
  * @param {Object/Array} values The template values. Can be an array if your params are numeric (i.e. {0}) or an object (i.e. {foo: 'bar'})
  * @return {String} The HTML fragment
  * @member cmvc.Template
- * @method apply
  */
 cmvc.Template.prototype.apply = cmvc.Template.prototype.applyTemplate;
 

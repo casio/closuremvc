@@ -4,7 +4,6 @@ goog.require("goog.array");
 goog.require("goog.object");
 goog.require("goog.events");
 
-goog.require("cmvc.ui.View.EventDispatch");
 
 /**
  * Iterate over all pairs of event/function_reference and event/array_of_function_references pairs 

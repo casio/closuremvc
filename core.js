@@ -175,6 +175,7 @@ cmvc.inheritProperty = function(me, property, mode) {
 /**
  *  This implementation of construct found at:
  *  http://groups.google.com/group/comp.lang.javascript/msg/ae35286efaf132f2
+ *  @constructor
  */
 cmvc.construct = function(constructorFn, args) {
   args = args || [];
